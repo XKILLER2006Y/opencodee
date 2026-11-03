@@ -1,0 +1,13 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+*.jks
+*.keystore
+dist/
+# the release keystore is committed on purpose (private repo)
+!keystore/
+!keystore/release.jks
+!keystore/keystore.properties
