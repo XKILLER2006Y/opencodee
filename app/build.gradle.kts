@@ -13,21 +13,22 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "app.ocmobile"
+    namespace = "com.celoext"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "app.ocmobile"
+        applicationId = "com.celoext"
         minSdk = 26
         // 28 on purpose: proot runs binaries from the app data directory,
         // and with targetSdk >= 29 Android forbids exec from app_data_file (same as Termux).
         // The APK is distributed as a file, not through Play.
         targetSdk = 28
-        versionCode = 4
-        versionName = "0.0.1 beta-4"
+        // CI passes -PappVersionCode / -PappVersionName (from the workflow run number); local builds use the defaults
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 5
+        versionName = (project.findProperty("appVersionName") as String?) ?: "0.0.1 beta-5"
         ndk { abiFilters += "arm64-v8a" }
         // Repo whose GitHub releases the in-app updater checks. Set `updateRepo=owner/name` in gradle.properties.
-        val updateRepo = (project.findProperty("updateRepo") as String?) ?: "usermahiro/opencode-mobile"
+        val updateRepo = (project.findProperty("updateRepo") as String?) ?: "usermahiro/opencodee"
         buildConfigField("String", "UPDATE_REPO", "\"$updateRepo\"")
     }
 

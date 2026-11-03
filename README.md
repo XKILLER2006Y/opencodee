@@ -20,17 +20,23 @@ Current version: **v0.0.1 beta-4**. Android 8+, arm64. Unofficial client.
 
 **Skills.** Type `/` in the chat to pick a skill or command. Skills are regular `SKILL.md` folders, so you can import the ones you use in Claude or ChatGPT (.zip, .skill or SKILL.md), paste the instructions of a custom GPT or a Claude project, or ask the agent to write a new skill in the chat.
 
+**Kamihub.** Settings → Providers → Add provider → Kamihub (`https://kamihub.us.ci/v1`, OpenAI-compatible). Paste the API key; the app reads `/v1/models` with it, registers every model it returns (for example `alicn/deepseek-v4.1-flash`) and stores the key in OpenCode's auth store like any other provider. Unknown model limits default to 128k context / 8k output with tool calls on; edit the provider block in the config editor if a model needs other values.
+
 **Default skills.** Two skills ship inside the app and the agent uses them without being asked: `anti-ai-slop-writing` (all prose it writes: replies, docs, commit messages, PR text) and `reverse-engineer-anything` ([REA](https://github.com/morluto/rea), for "how does this app/binary/site work" questions). They are copied into the skills folder once; delete one in Settings → Skills and it stays deleted, and its always-on rule disappears with it. The bundled files are condensed versions; run `tools/fetch-default-skills.sh` (pin `SLOP_REF` / `REA_REF` to commits) to replace them with the upstream files.
 
 **GitHub.** Sign in once with a device code. The app installs git and the GitHub CLI in Ubuntu and sets git to your name and noreply email. After that the agent can clone, commit, push and open pull requests as you. It is told never to add Co-Authored-By or other AI attribution.
 
-**Phone tools.** The app exposes an MCP server to the agent, so it can show notifications, set reminders and alarms, read and fill the clipboard, take a photo, get your location, save files to Downloads and share them. Each tool can be switched off. Sites the agent builds open in a live preview inside the app.
+**Interface.** Material 3 (Material You): dynamic wallpaper colors on Android 12+, tonal surfaces, M3 buttons, switches, sheets and dialogs.
+
+**Root mode.** Settings → OpenCode → “Run as root” starts proot through `su`, so Ubuntu can read the Termux home and other protected paths.
+
+**Phone tools.** The app exposes an MCP server to the agent, so it can show notifications, set reminders, read and fill the clipboard, take a photo, save files to Downloads and share them. Each tool can be switched off. Sites the agent builds open in a live preview inside the app.
 
 **Usage.** A ring in the top bar shows the 5-hour, weekly and monthly limits you set, and what fills the context window (system prompt, tools, MCP, skills, memory, messages). The composer can show an estimated cost before you send.
 
 **Interrupted tasks.** If Android kills the server in the middle of a task, the chat offers Continue or Cancel when you come back. Progress can also be shown on the lock screen, with Allow and Deny buttons for permission requests.
 
-**Interfaces.** The default look is cl0udly: graphite with quiet pixel clouds and a small cloud that acts out what the agent is doing. It reacts to taps, petting, shaking and charging, dresses up for holidays and has its own room with ping-pong. In this look the assistant introduces itself as cl0udly and names its real model when asked. All of it can be tuned in Settings → cl0udly. Several other looks are in Settings, including OpenCode Desktop and OpenCode Terminal. The app icon can follow the look.
+**Interfaces.** The default look is CeloAgents: graphite with quiet pixel clouds and a small cloud that acts out what the agent is doing. It reacts to taps, petting, shaking and charging, dresses up for holidays and has its own room with ping-pong. In this look the assistant introduces itself as CeloAgents and names its real model when asked. All of it can be tuned in Settings → CeloAgents. Several other looks are in Settings, including OpenCode Desktop and OpenCode Terminal. The app icon can follow the look.
 
 **Your computer.** Remote devices → Add device → Scan QR code. On the computer run `curl -fsSL https://raw.githubusercontent.com/mistqkw/opencode-mobile/main/tools/connect-qr.sh | sh`: it starts OpenCode 1.x on your local network with a new password and prints a QR code. The phone and computer need to be on the same network.
 
@@ -64,7 +70,7 @@ This is a beta and there are bugs. Please report them in [Issues](../../issues).
 - `tools/connect-qr.sh` starts OpenCode on a computer and prints the QR code for the app.
 - `tools/promo/` has the scripts that render the promo video and banners.
 
-OpenCode is pinned to 1.19.4 (`RuntimeController.OC_VERSION`), the version the client is tested against.
+OpenCode is pinned to 2.2.5 (`RuntimeController.OC_VERSION`), the version the client targets.
 
 `targetSdk` is 28 on purpose: from 29 on, Android does not allow running binaries from the app's data directory, and proot needs that (Termux does the same). For the same reason the app is distributed as an APK and not through Google Play.
 
@@ -74,7 +80,7 @@ OpenCode is pinned to 1.19.4 (`RuntimeController.OC_VERSION`), the version the c
 ./gradlew :app:assembleDebug
 ```
 
-JDK 21 is required. Release builds are made by GitHub Actions when a `v*` tag is pushed (`.github/workflows/release.yml`).
+JDK 21 is required. Release builds are made by GitHub Actions on every push to `main` (`.github/workflows/release.yml`). The version is the run number: run #5 publishes `v0.0.1-beta-5` (versionName `0.0.1 beta-5`, versionCode 5), nothing to type in. Set the repository variable `VERSION_OFFSET` to shift the number.
 The workflow runs the unit tests, builds, signs with `keystore/release.jks` (kept in this private repo, see `keystore/README.md`),
 checks the signature and publishes the APK with a `.sha256` file.
 
@@ -91,4 +97,3 @@ Phones other than a Pixel, Android 14–16 on other firmware, light themes of ev
 The app's own code is MIT (see `LICENSE`).
 
 OpenCode mobile is an unofficial client and is not affiliated with the OpenCode developers. "OpenCode" is the name of their project (MIT). The app includes proot and libtalloc from Termux (GPL-2.0 / LGPL-3.0), whose sources are in the Termux project, and downloads Ubuntu Base 24.04 and OpenCode on first launch. Those components keep their own licenses. Fonts: Inter, Source Serif 4, Unbounded and JetBrains Mono, all SIL OFL 1.1.
-# opencodee

@@ -89,13 +89,16 @@ jobs:
             VERSION="unknown"
           fi
 
-          APK_NAME="opencode-mobile-${VERSION}-${GITHUB_RUN_NUMBER}.apk"
+          # versionName may contain spaces ("0.0.1 beta-4"); tags and file names may not
+          SAFE_VERSION="$(echo "$VERSION" | tr -c "A-Za-z0-9._-" "-" | sed -E "s/-+/-/g; s/^-|-$//g")"
+          APK_NAME="opencode-mobile-${SAFE_VERSION}-${GITHUB_RUN_NUMBER}.apk"
           SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
 
           cp "$SOURCE_APK" "$APK_NAME"
           sha256sum "$APK_NAME" > "$APK_NAME.sha256"
 
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "SAFE_VERSION=$SAFE_VERSION" >> "$GITHUB_ENV"
           echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
 
       - name: Publish GitHub Release
@@ -103,7 +106,7 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           TARGET_REPO: ${{ vars.RELEASE_REPO || github.repository }}
         run: |
-          TAG="v${VERSION}-build${GITHUB_RUN_NUMBER}"
+          TAG="v${SAFE_VERSION}-build${GITHUB_RUN_NUMBER}"
           TITLE="OpenCode Mobile ${VERSION} (Build ${GITHUB_RUN_NUMBER})"
 
           NOTES="### Release Details

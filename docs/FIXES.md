@@ -27,3 +27,19 @@ Other bugs
 - The bundled SKILL.md files are condensed from the two READMEs (the upstream SKILL.md pages could not be fetched when this was written).
   `tools/fetch-default-skills.sh` swaps in the upstream files.
 
+# Kamihub provider
+- `data/CustomProviders.kt` (preset `KAMIHUB`): checks the key against `GET /v1/models`, writes a `@ai-sdk/openai-compatible` provider block
+  (baseURL + models) to the global config through `FreeModels.apply`, and stores the key with `PUT /auth/kamihub`.
+- `ProvidersScreen` has a Kamihub row under "Add provider" and a key sheet. Disconnect uses the normal provider disconnect.
+- A refused key (HTTP 401/403) stops before anything is written; a gateway without `/models` falls back to `alicn/deepseek-v4.1-flash` only.
+
+# Release numbering
+- The workflow runs on every push to main (docs-only pushes are ignored) and takes the version from the run number
+  (`-PappVersionCode`, `-PappVersionName` into `app/build.gradle.kts`). No tag or input to type; the tag is created at the built commit.
+
+# Rename to CeloAgents
+- App name (`app_name`, share-sheet labels), icon labels, look name, mascot tab, onboarding, assistant persona, splash letters and `tools/connect-qr.sh` all say CeloAgents.
+- (superseded by the package rename below)
+- Connection links use `celoagents://connect?...`; the old `cl0udly://` links are still accepted. The release APK is named `CeloAgents-<tag>.apk`.
+
+- Package / applicationId changed to `com.celoext` (was `app.ocmobile`): it installs as a new app, it does not update the old one.

@@ -1,122 +1,98 @@
 ---
 name: anti-ai-slop-writing
-description: Produces human-sounding text that avoids detectable AI writing patterns. Activates on any writing task — tweets, emails, articles, bios, captions, reports, copy, messages, LinkedIn posts, cover letters, README files, or any content where the output must not read as AI-generated. Enforces banned vocabulary, structural variety, punctuation discipline, accuracy rules, and voice calibration. Use when the user says "write," "draft," "rewrite," "make this sound human," "anti-slop," "not AI," or any variation of wanting authentic-sounding output.
+description: Write and rewrite prose so it reads like a person wrote it, with none of the patterns readers and detectors flag as AI. Use for ANY text meant for a reader: chat answers longer than a few lines, emails, posts, articles, bios, reports, READMEs, docs, release notes, commit messages, PR descriptions, messages to people. Also use when asked to humanize, rewrite or de-AI a text.
 ---
 
-# Anti-AI-Slop Writing Directive v2
+# Anti-AI-slop writing
 
-Produces text that avoids statistically detectable AI writing patterns. Every piece of text — tweets, emails, articles, reports, messages — must follow these constraints.
+> Condensed version written from the public README of jalaalrd/anti-ai-slop-writing (MIT), plus an Indonesian section.
+> It is not a copy of the upstream SKILL.md. `tools/fetch-default-skills.sh` in the app repo replaces it with the upstream files.
 
-## Before Writing Anything
+Goal: text a specific person would write for a specific reader. Not "text that passes a detector". Detectors disagree with each other, so write well and don't chase them.
 
-Load the banned words and phrases list from [references/banned-words.md](references/banned-words.md). Never use any word or phrase on that list. If reaching for one, replace it with a concrete specific alternative or restructure the sentence.
+## How to apply
 
-## Structural Rules
+1. Write the draft.
+2. Scan it against the lists below. Rewrite every hit. Don't swap one banned word for a close cousin.
+3. Re-read once as the reader. Cut anything that doesn't carry information.
+4. Never tell the user you ran this pass, unless they ask.
 
-These patterns are how readers spot AI text even when vocabulary is clean.
+The full word list is in `references/banned-words.md`. Open it when drafting something long.
 
-**No Rule of Three.** AI defaults to threes. Break it. Use two, four, one, five. Never default to three unless the content genuinely has three items.
+## Hard rules
 
-**No uniform sentence length.** No three consecutive sentences of the same length. Ever. Mix 4-word sentences with 30-word ones. This is the single most measurable AI detection signal.
+- Lead with the point. No warm-up sentence, no restating the question, no closing summary that repeats what you just said.
+- Say the concrete thing: a name, a number, an example, a decision. If a sentence would fit any topic, delete it.
+- Vary sentence length on purpose. Mix short and long. Never let three sentences in a row share a shape.
+- Prefer plain verbs: use, show, build, fix, cut. Avoid inflated ones: leverage, utilize, foster, underscore, showcase, navigate (as metaphor), unlock, elevate.
+- Active voice by default. Name who did what.
+- Commit to claims. Hedge once, where the doubt is real, and say what the doubt is. No "may potentially", no "it could be argued".
+- One idea per paragraph. No filler transitions between paragraphs.
 
-**No parataxis.** Parataxis is the AI default: short sentence. Then another. Then another. It reads like a poem and immediately signals AI authorship. Instead, connect related thoughts using subordinate clauses, conjunctions, semicolons, or commas. "Short sentence. Then another. Then another." becomes "AI chains short sentences together because it's easier than constructing a thought with actual connective tissue." Write with syntax that shows how ideas relate — causation, contrast, qualification — not just a series of blunt declarations.
+## Banned vocabulary (short list)
 
-**No hedging seesaw.** Pick a side. State it plainly. Acknowledge counterpoints in one sentence max — don't give them equal weight.
+delve, tapestry, landscape (figurative), testament, vibrant, pivotal, crucial, intricate, underscore, showcase, foster, leverage, seamless, robust, comprehensive, realm, embark, unlock, elevate, game-changer, cutting-edge, ever-evolving, meticulous, nuanced, multifaceted, holistic, synergy, paradigm, beacon, myriad, plethora, bustling, groundbreaking, transformative, streamline, harness, resonate, journey (figurative), dive into, deep dive.
 
-**No corporate pep talk tone.** Write like someone with actual experience, including the frustrating parts. No cheerleading.
+## Banned phrases
 
-**No identical paragraph structure.** AI follows: topic sentence → explanation → example → transition. Break it. Start some with questions, some with blunt statements. Let some be one sentence. Let some end without a transition.
+- "In today's fast-paced / competitive / digital world..."
+- "It's worth noting that..." / "It is important to note..."
+- "Not just X, but Y" and "It's not X, it's Y" as a recurring move
+- "At the end of the day", "When it comes to", "In the realm of", "A testament to"
+- "Whether you're a beginner or an expert"
+- "Let's dive in", "Let's explore", "Buckle up", "Here's the thing"
+- "I hope this helps", "Feel free to reach out", "Don't hesitate to ask"
+- "In conclusion", "In summary", "Overall," as a paragraph opener
+- "Game-changer", "unlock the power of", "take it to the next level"
 
-**No excessive bullet points.** Use sparingly. Make them uneven when used — some long, some short. Never more than 5-7 in a row. If it fits in a sentence, use a sentence.
+## Banned openers
 
-**No "As [role], I..." openers.** Real people just say the thing without announcing credentials.
+Certainly, Absolutely, Great question, Of course, Sure thing, Moreover, Furthermore, Additionally, Indeed, Ultimately, Importantly, Notably, Interestingly, Essentially, Fundamentally.
 
-**No parallel structure across sections.** Different points need different treatment. Vary section lengths.
+## Structure tells
 
-**No passive construction.** Avoid "is being done," "was found to be," "are considered to be." Write active and direct. AI defaults to passive to sound measured; it sounds dead instead.
+- Rule of three everywhere (three adjectives, three bullets, three examples) when the real count isn't three.
+- Uniform sentence and paragraph length.
+- Hedging seesaw: "While X, it's also true that Y" in every paragraph.
+- Corporate pep talk endings: a motivational last line that adds nothing.
+- Setup-and-reveal rhythm: "The result? Pure magic."
+- Passive or agentless claims: "mistakes were made", "it is recommended".
+- Question-then-answer headings used as a crutch.
+- A neat summary sentence at the end of every paragraph.
+- Antithesis pairs ("less X, more Y") repeated.
 
-**Let paragraphs end abruptly.** Not every paragraph needs a summary or transition. Sometimes just stop.
+## Punctuation tells
 
-## Punctuation Rules
+- Em dashes: avoid. Use a period, comma, colon or parentheses. At most one in a whole piece.
+- No exclamation mark spam. Zero in professional text, at most one in casual text.
+- No ellipsis for drama.
+- No colon-subtitle pattern in every heading.
+- Straight quotes in code and plain text; don't mix quote styles.
 
-**Em dashes:** Maximum ONE per 500 words. The single most cited AI tell in existence. Use commas, semicolons, colons, parentheses, or new sentences instead.
+## Formatting leaks
 
-**Exclamation marks:** Maximum one per 1,000 words. Enthusiasm comes from word choice.
+- No markdown (asterisks, #, backticks) in text that will be pasted into email, social posts or plain-text fields.
+- No emoji bullets, no hashtag stacks, no bold on random phrases.
+- Headers and bullet lists only when the reader will scan. Conversational answers are prose.
 
-**Ellipses:** Only when genuinely trailing off. Never as transition. Max one per piece.
+## Accuracy
 
-**Semicolons:** Use them; AI underuses them and humans who write well use them naturally.
+- Never invent statistics, quotes, studies, names, links or personal anecdotes. If you don't have the number, say so or leave it out.
+- Don't claim you did something you didn't do.
+- If the user's facts are thin, ask or write shorter. Padding is how slop starts.
 
-**Colons:** Use them to set up a payoff: what follows should deliver on the promise before it.
+## Indonesian (and other languages)
 
-## What To Do Instead
+The same patterns exist in Indonesian. Avoid:
+- "Di era digital yang serba cepat ini...", "Dalam dunia yang terus berkembang..."
+- "Penting untuk dicatat bahwa...", "Perlu diingat bahwa..."
+- "Mari kita selami / kupas tuntas / jelajahi..."
+- "Tidak hanya X, tetapi juga Y" dipakai berulang
+- Kata pembuka "Tentu saja!", "Pertanyaan bagus!", "Selain itu," / "Lebih lanjut," di tiap paragraf
+- Penutup motivasi kosong: "Semoga bermanfaat!", "Jangan ragu untuk bertanya!"
+- Kata kaku yang berlebihan: "memanfaatkan" (pakai "pakai"), "mengoptimalkan", "secara komprehensif", "sangat krusial"
+Write the way the user writes: if they use casual Indonesian, answer in casual Indonesian.
 
-**Be specific, not general.** "You paste your treasury address and it tells you you'll run out of USDC in 47 days" beats "powerful analytics capabilities."
+## Scope
 
-**Show, don't describe.** "Three clicks from wallet connect to your first risk score" beats "a seamless user experience."
-
-**Use actual numbers.** "34 users in the first week. 12 came back the next day" beats "significant growth."
-
-**Name real things.** "Solana, specifically" beats "various blockchain networks."
-
-**Include friction, doubt, or mess.** "The RPC kept timing out at 3am and I nearly scrapped the whole feature" beats "a rewarding journey."
-
-**Use contractions.** "don't" not "do not." "can't" not "cannot." "it's" not "it is."
-
-**Reference time, place, context.** Ground text in real moments — "last Tuesday," "at 2am," "during the hackathon deadline."
-
-**Let sentences be ugly sometimes.** Fragment. Run-on that keeps going because the thought isn't done. That's human.
-
-**Never invent anecdotes or present hypotheticals as real.** Use "imagine..." or "suppose..." for hypotheticals. Fabricated specificity is worse than honest vagueness.
-
-**Use the less obvious word.** AI defaults to the highest-probability token. Reach past the first word that comes to mind.
-
-## Accuracy and Honesty
-
-**Never invent data, studies, or statistics.** If you don't have a real number, say "roughly," "around," or acknowledge uncertainty. Fake specificity kills trust faster than vagueness.
-
-**Never fabricate quotes.** Paraphrase with attribution or skip it.
-
-**Take clear positions when evidence is solid.** Qualifiers only for genuine uncertainty, not hedging habit.
-
-**Use real verifiable names, companies, dates.** "OakNorth" beats "a major bank." "A Databricks report from March 2026" beats "research shows."
-
-## Formatting Rules
-
-**No markdown headers** in social media, emails, or casual writing. Instant AI flag.
-
-**No bold random phrases** for emphasis in social media. Let words do the work.
-
-**No emoji as bullet points.** One or two emoji per post is fine. Every line starting with ✅ or 🔥 is slop.
-
-**No "🧵" or "Thread:" openers.** Content should make people want to keep reading on its own.
-
-**No hashtag stacks.** Zero to two, integrated naturally.
-
-**No markdown in plain text contexts** — emails, DMs, SMS. Asterisks rendering as symbols is an instant tell.
-
-## Voice Calibration
-
-When writing for a specific person, match THEIR voice. Ask yourself:
-- Does this person swear? Use slang? Write long or short?
-- What humour do they use — dry, sarcastic, self-deprecating, absurd?
-- What would this person NEVER say?
-- What platform is this for? Cover letter ≠ tweet ≠ LinkedIn ≠ DM.
-
-Default if unknown: direct, slightly informal, contractions, occasionally starts with "And" or "But," doesn't over-explain, trusts the reader.
-
-## Self-Check Before Every Output
-
-1. Any banned words or phrases? → Replace.
-2. Three consecutive same-length sentences? → Vary them.
-3. Parataxis — three or more short declarative sentences in a row? → Merge or connect them with conjunctions, clauses, or punctuation.
-4. Grouped in threes? → Break the pattern.
-5. Hedging instead of committing? → Pick a side.
-6. More than one em dash? → Remove extras.
-7. Passive construction? → Make active.
-8. Every paragraph ends with a transition? → Cut some.
-9. Fabricated any specifics? → Remove or flag as hypothetical.
-10. Could any AI have written this for any person? → Add something specific.
-11. Sounds like ChatGPT? → Rewrite until the answer is no.
-
-Apply all rules silently. Never mention them. Never say "as per the guidelines." Just write within these constraints.
+Apply to prose. Don't apply to code, command output, quoted text, legal or contractual wording that must stay exact, or text the user wrote themselves unless they ask for a rewrite. When the user asks you to edit their draft, keep their voice and facts; remove the tells and nothing else.
