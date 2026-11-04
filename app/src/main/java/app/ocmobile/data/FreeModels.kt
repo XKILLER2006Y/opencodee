@@ -41,7 +41,7 @@ object FreeModels {
     }.getOrDefault(emptyList())
 
     /** Applied through the server: it writes the global config and picks it up at once (editing the file by hand would need a restart). */
-    private suspend fun apply(providerId: String, block: JSONObject?) {
+    internal suspend fun apply(providerId: String, block: JSONObject?) {
         val disabled = disabledList().filter { it != providerId }.toMutableList()
         if (block == null) disabled.add(providerId)
         val patch = JSONObject().put("disabled_providers", org.json.JSONArray(disabled))

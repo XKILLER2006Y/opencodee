@@ -27,3 +27,9 @@ Other bugs
 - The bundled SKILL.md files are condensed from the two READMEs (the upstream SKILL.md pages could not be fetched when this was written).
   `tools/fetch-default-skills.sh` swaps in the upstream files.
 
+# Kamihub provider
+- `data/CustomProviders.kt` (preset `KAMIHUB`): checks the key against `GET /v1/models`, writes a `@ai-sdk/openai-compatible` provider block
+  (baseURL + models) to the global config through `FreeModels.apply`, and stores the key with `PUT /auth/kamihub`.
+- `ProvidersScreen` has a Kamihub row under "Add provider" and a key sheet. Disconnect uses the normal provider disconnect.
+- A refused key (HTTP 401/403) stops before anything is written; a gateway without `/models` falls back to `alicn/deepseek-v4.1-flash` only.
+

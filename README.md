@@ -20,6 +20,8 @@ Current version: **v0.0.1 beta-4**. Android 8+, arm64. Unofficial client.
 
 **Skills.** Type `/` in the chat to pick a skill or command. Skills are regular `SKILL.md` folders, so you can import the ones you use in Claude or ChatGPT (.zip, .skill or SKILL.md), paste the instructions of a custom GPT or a Claude project, or ask the agent to write a new skill in the chat.
 
+**Kamihub.** Settings → Providers → Add provider → Kamihub (`https://kamihub.us.ci/v1`, OpenAI-compatible). Paste the API key; the app reads `/v1/models` with it, registers every model it returns (for example `alicn/deepseek-v4.1-flash`) and stores the key in OpenCode's auth store like any other provider. Unknown model limits default to 128k context / 8k output with tool calls on; edit the provider block in the config editor if a model needs other values.
+
 **Default skills.** Two skills ship inside the app and the agent uses them without being asked: `anti-ai-slop-writing` (all prose it writes: replies, docs, commit messages, PR text) and `reverse-engineer-anything` ([REA](https://github.com/morluto/rea), for "how does this app/binary/site work" questions). They are copied into the skills folder once; delete one in Settings → Skills and it stays deleted, and its always-on rule disappears with it. The bundled files are condensed versions; run `tools/fetch-default-skills.sh` (pin `SLOP_REF` / `REA_REF` to commits) to replace them with the upstream files.
 
 **GitHub.** Sign in once with a device code. The app installs git and the GitHub CLI in Ubuntu and sets git to your name and noreply email. After that the agent can clone, commit, push and open pull requests as you. It is told never to add Co-Authored-By or other AI attribution.
@@ -91,4 +93,3 @@ Phones other than a Pixel, Android 14–16 on other firmware, light themes of ev
 The app's own code is MIT (see `LICENSE`).
 
 OpenCode mobile is an unofficial client and is not affiliated with the OpenCode developers. "OpenCode" is the name of their project (MIT). The app includes proot and libtalloc from Termux (GPL-2.0 / LGPL-3.0), whose sources are in the Termux project, and downloads Ubuntu Base 24.04 and OpenCode on first launch. Those components keep their own licenses. Fonts: Inter, Source Serif 4, Unbounded and JetBrains Mono, all SIL OFL 1.1.
-# opencodee

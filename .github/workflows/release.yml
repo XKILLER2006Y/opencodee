@@ -1,132 +1,85 @@
+# Release on tag: v0.0.1-beta-5 → test, build the APK, sign it with keystore/release.jks (kept in this private repo),
+# publish to GitHub Releases together with a .sha256 file.
+#
+# Private repo note: the in-app updater reads releases through the public GitHub API, so it gets HTTP 404 for a private repo.
+# To keep the source private but let the app update itself, set:
+#   - repository variable  RELEASE_REPO   = owner/public-repo-that-only-holds-releases  (same value as `updateRepo` in gradle.properties)
+#   - repository secret    RELEASE_TOKEN  = fine-grained PAT with "Contents: read and write" on that repo
+# Without them the release is published in this repo.
 name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, e.g. v0.0.1-beta-5"
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   apk:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
 
-      - name: Decode signing keystore
-        if: env.RELEASE_KEYSTORE_BASE64 != ''
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      - name: Check signing key and version
         run: |
-          mkdir -p keystore
-          echo "$RELEASE_KEYSTORE_BASE64" | base64 --decode > keystore/release.jks
+          test -f keystore/release.jks || { echo "keystore/release.jks is missing"; exit 1; }
+          test -f keystore/keystore.properties || { echo "keystore/keystore.properties is missing"; exit 1; }
+          VN=$(sed -n 's/.*versionName = "\(.*\)".*/\1/p' app/build.gradle.kts | head -1)
+          norm() { echo "$1" | sed 's/^v//' | tr '[:upper:] ' '[:lower:]-'; }
+          if [ "$(norm "$VN")" != "$(norm "$TAG")" ]; then
+            echo "Tag $TAG does not match versionName \"$VN\" in app/build.gradle.kts: the updater would loop"; exit 1
+          fi
 
-      - name: Check signing configuration
-        run: |
-          test -f keystore/release.jks || {
-            echo "::error::Missing keystore/release.jks"
-            exit 1
-          }
-
-          test -f keystore/keystore.properties || {
-            echo "::error::Missing keystore/keystore.properties"
-            exit 1
-          }
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Run unit tests
+      - name: Unit tests
         run: ./gradlew --no-daemon :app:testDebugUnitTest
 
-      - name: Build APK
+      - name: Build
         run: ./gradlew --no-daemon :app:assembleRelease
 
-      - name: Verify APK signature
+      - name: Verify signature
         run: |
-          APK="app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk | tee /tmp/cert.txt
+          KEY_SHA=$(keytool -list -keystore keystore/release.jks -storepass "$(sed -n 's/^storePassword=//p' keystore/keystore.properties)" 2>/dev/null | sed -n 's/.*SHA-256): *//p' | tr -d ':' | tr 'A-F' 'a-f')
+          grep -qi "$KEY_SHA" /tmp/cert.txt || { echo "APK is not signed with keystore/release.jks"; exit 1; }
 
-          if [ ! -f "$APK" ]; then
-            echo "::error::Release APK not found at $APK"
-            exit 1
-          fi
-
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
-
-          if [ -z "$APKSIGNER" ]; then
-            echo "::error::apksigner tool not found in $ANDROID_HOME/build-tools"
-            exit 1
-          fi
-
-          "$APKSIGNER" verify --verbose --print-certs "$APK"
-
-      - name: Prepare release files
-        run: |
-          # Robust extraction handling single/double quotes and whitespace variations
-          VERSION=$(grep -E 'versionName\s*=\s*["'"'"']' app/build.gradle.kts | sed -E 's/.*versionName\s*=\s*["'"'"']([^"'"'"']+)["'"'"'].*/\1/' | head -n 1)
-
-          if [ -z "$VERSION" ]; then
-            VERSION="unknown"
-          fi
-
-          # versionName may contain spaces ("0.0.1 beta-4"); tags and file names may not
-          SAFE_VERSION="$(echo "$VERSION" | tr -c "A-Za-z0-9._-" "-" | sed -E "s/-+/-/g; s/^-|-$//g")"
-          APK_NAME="opencode-mobile-${SAFE_VERSION}-${GITHUB_RUN_NUMBER}.apk"
-          SOURCE_APK="app/build/outputs/apk/release/app-release.apk"
-
-          cp "$SOURCE_APK" "$APK_NAME"
-          sha256sum "$APK_NAME" > "$APK_NAME.sha256"
-
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-          echo "SAFE_VERSION=$SAFE_VERSION" >> "$GITHUB_ENV"
-          echo "APK_NAME=$APK_NAME" >> "$GITHUB_ENV"
-
-      - name: Publish GitHub Release
+      - name: Publish
         env:
+          # RELEASE_TOKEN + RELEASE_REPO publish to a separate public repo; otherwise this repo is used
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           TARGET_REPO: ${{ vars.RELEASE_REPO || github.repository }}
         run: |
-          TAG="v${SAFE_VERSION}-build${GITHUB_RUN_NUMBER}"
-          TITLE="OpenCode Mobile ${VERSION} (Build ${GITHUB_RUN_NUMBER})"
-
-          NOTES="### Release Details
-          - **Version:** ${VERSION}
-          - **Build:** ${GITHUB_RUN_NUMBER}
-          - **Commit:** ${GITHUB_SHA}
-          - **Branch:** ${GITHUB_REF_NAME}"
-
-          gh release create "$TAG" \
-            "$APK_NAME" \
-            "$APK_NAME.sha256" \
-            --title "$TITLE" \
-            --notes "$NOTES" \
-            --repo "$TARGET_REPO"
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: opencode-mobile-${{ github.run_number }}
-          path: |
-            ${{ env.APK_NAME }}
-            ${{ env.APK_NAME }}.sha256
-          retention-days: 30
+          APK="opencode-mobile-$TAG.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          sha256sum "$APK" > "$APK.sha256"
+          NOTES="docs/releases/$TAG.md"
+          [ -f "$NOTES" ] || echo "OpenCode mobile $TAG" > "$NOTES"
+          PRE=""; case "$TAG" in *alpha*|*beta*|*rc*) PRE="--prerelease";; esac
+          NAME="${TAG/-beta-/ beta-}"
+          if gh release view "$TAG" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" "$APK.sha256" --clobber --repo "$TARGET_REPO"
+          else
+            gh release create "$TAG" "$APK" "$APK.sha256" $PRE --title "$NAME" --notes-file "$NOTES" --repo "$TARGET_REPO"
+          fi

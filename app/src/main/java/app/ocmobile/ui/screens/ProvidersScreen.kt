@@ -62,12 +62,16 @@ fun ProvidersScreen(nav: Nav) {
     var query by remember { mutableStateOf("") }
     var connect by remember { mutableStateOf<AllProvider?>(null) }
     var disconnect by remember { mutableStateOf<String?>(null) }
+    var kamihub by remember { mutableStateOf(false) }
 
     suspend fun load() { all = runCatching { Graph.api.allProviders().all }.getOrDefault(emptyList()); loading = false }
     LaunchedEffect(Unit) { load() }
 
     val connectedIds = connected.map { it.id }.toSet()
-    val available = all.filter { it.id !in connectedIds && (query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true)) }
+    val kami = app.ocmobile.data.CustomProviders.KAMIHUB
+    val showKamihub = kami.id !in connectedIds && (query.isBlank() || kami.name.contains(query, true) || kami.id.contains(query, true))
+    // Kamihub has its own row (it needs a key and registers its models), so it is not listed twice
+    val available = all.filter { it.id !in connectedIds && it.id != kami.id && (query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true)) }
         .sortedWith(compareBy({ popular.indexOf(it.id).let { i -> if (i < 0) 999 else i } }, { it.name.lowercase() }))
 
     Column(Modifier.fillMaxSize().screenBackdrop("ProvidersScreen1")) {
@@ -100,6 +104,7 @@ fun ProvidersScreen(nav: Nav) {
             if (loading) item { Box(Modifier.fillMaxWidth().padding(24.dp)) { Spinner(26.dp) } }
             item {
                 SettingsGroup {
+                    if (showKamihub) SettingsRow(kami.name, subtitle = "kamihub.us.ci · OpenAI-compatible", icon = Ic.Plus, chevron = true, onClick = { kamihub = true })
                     available.take(60).forEach { p ->
                         SettingsRow(p.name.ifBlank { p.id }, subtitle = p.id, icon = Ic.Plus, chevron = true, onClick = { connect = p })
                     }
@@ -111,6 +116,7 @@ fun ProvidersScreen(nav: Nav) {
     connect?.let { p ->
         ConnectSheet(p, onDone = { connect = null; scope.launch { load() } })
     }
+    if (kamihub) KamihubSheet(onDone = { kamihub = false; scope.launch { load() } })
     disconnect?.let { id ->
         OcDialog("Disconnect $id?", { disconnect = null }, "Disconnect", {
             disconnect = null
@@ -190,6 +196,34 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
                     }
                 }, enabled = code.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth())
             }
+            error?.let { Txt(it, size = 15.sp, color = c.danger) }
+        }
+    }
+}
+
+@Composable
+private fun KamihubSheet(onDone: () -> Unit) {
+    val c = Oc.c
+    val scope = rememberCoroutineScope()
+    val p = app.ocmobile.data.CustomProviders.KAMIHUB
+    var key by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    OcSheet(onDone, p.name, skipHalf = false) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The model list is fetched with your key.", size = 14.sp, color = c.textDim)
+            Txt("API key", size = 16.sp, color = c.textDim)
+            OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
+            Pill(if (busy) "Connecting…" else "Connect", {
+                busy = true; error = null
+                scope.launch {
+                    runCatching { app.ocmobile.data.CustomProviders.connect(p, key) }
+                        .onSuccess { n -> Graph.chats.toasts.tryEmit("${p.name} connected ($n models)"); onDone() }
+                        .onFailure { error = it.message ?: "Could not connect" }
+                    busy = false
+                }
+            }, enabled = key.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth())
             error?.let { Txt(it, size = 15.sp, color = c.danger) }
         }
     }

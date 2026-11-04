@@ -1,6 +1,5 @@
 package app.ocmobile.runtime
 
-import app.ocmobile.data.Memory
 import app.ocmobile.data.Vault
 import android.app.Application
 import android.content.Intent
@@ -74,7 +73,7 @@ class RuntimeController(
             }
 
             Vault.restore()
-            Memory.sync() // copies the default skills and writes their rules into AGENTS.md
+            app.ocmobile.data.Memory.sync() // copies the default skills and writes their rules into AGENTS.md
             installOpencode(OC_VERSION, OC_URL_OR(OC_VERSION), if (OC_VERSION == "1.19.4") OC_SHA else null)
             smokeTest()
 
