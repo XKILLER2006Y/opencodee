@@ -1,7 +1,7 @@
 #!/bin/sh
 # Connect a phone to OpenCode on this computer with a QR code.
 # Starts `opencode serve` on the local network with a new password and shows a QR code:
-# in cl0udly, Remote devices → Add device → Scan QR code (or point the phone camera at it).
+# in CeloAgents, Remote devices → Add device → Scan QR code (or point the phone camera at it).
 # The phone and computer must be on the same network. Stop with Ctrl+C.
 #
 #   curl -fsSL https://raw.githubusercontent.com/mistqkw/opencode-mobile/main/tools/connect-qr.sh | sh
@@ -11,14 +11,14 @@ set -e
 PORT="${PORT:-4096}"
 NAME="${NAME:-$(hostname 2>/dev/null || echo Computer)}"
 
-# cl0udly talks to an OpenCode 1.x server (like the one in the phone container). If another
+# CeloAgents talks to an OpenCode 1.x server (like the one in the phone container). If another
 # branch (2.x) is installed here, or no OpenCode at all, download 1.19.4 once into the cache.
 OC_V=1.19.4
 OC=""
 if command -v opencode >/dev/null 2>&1 && opencode --version 2>/dev/null | grep -Eq '(^|[^0-9])1\.'; then
   OC=opencode
 else
-  CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/cl0udly"
+  CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/CeloAgents"
   DIR="$CACHE/opencode-$OC_V"
   case "$(uname -s)-$(uname -m)" in
     Linux-x86_64) ASSET=opencode-linux-x64.tar.gz ;;
@@ -28,7 +28,7 @@ else
     *) echo "No OpenCode $OC_V build for $(uname -s) $(uname -m)."; exit 1 ;;
   esac
   if [ ! -x "$DIR/opencode" ]; then
-    echo "Downloading OpenCode $OC_V for cl0udly (once, ~75 MB)…"
+    echo "Downloading OpenCode $OC_V for CeloAgents (once, ~75 MB)…"
     mkdir -p "$DIR"
     TMP="$DIR/$ASSET.part"
     curl -fL --progress-bar -o "$TMP" "https://github.com/anomalyco/opencode/releases/download/v$OC_V/$ASSET"
@@ -61,7 +61,7 @@ PASS=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')
 
 # the name may contain spaces and such: encode it for the link
 enc() { printf '%s' "$1" | od -An -tx1 -v | tr -d '\n' | sed 's/ \{1,\}/%/g; s/^%//; s/^/%/'; }
-LINK="cl0udly://connect?n=$(enc "$NAME")&u=$(enc "http://$IP:$PORT")&p=$PASS"
+LINK="celoagents://connect?n=$(enc "$NAME")&u=$(enc "http://$IP:$PORT")&p=$PASS"
 
 echo
 if command -v qrencode >/dev/null 2>&1; then
@@ -72,7 +72,7 @@ else
   echo "(Install 'qrencode' to see a QR code here. Meanwhile, enter the details by hand.)"
 fi
 echo
-echo "  cl0udly → Remote devices → Add device → Scan QR code"
+echo "  CeloAgents → Remote devices → Add device → Scan QR code"
 echo "  Or by hand: address $IP:$PORT, password $PASS"
 echo "  Stop with Ctrl+C."
 # an active firewall blocks the port for the phone

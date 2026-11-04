@@ -107,10 +107,10 @@ object Looks {
         compact = true,
     )
 
-    // cl0udly: the Kimi frame, a pixel cloud instead of the ball, a strip of pixel clouds on top.
+    // CeloAgents: the Kimi frame, a pixel cloud instead of the ball, a strip of pixel clouds on top.
     // Only black, white and a very dim blue.
     val cloud = Look(
-        "cloud", "cl0udly", "Graphite, pixel clouds, a little cloud mascot",
+        "cloud", "CeloAgents", "Graphite, pixel clouds, a little cloud mascot",
         pal(true, 0xFF0B0C0E, 0xFF141619, 0xFF1D2024, 0xFFE4E7EB, 0xFF8B9199, 0xFF25292E, 0xFF7C93AF, 0xFF97AAC2, 0xFF1D2024, 0xFF111316, 0xFF1A222C),
         pal(false, 0xFFF7F8FA, 0xFFEEF0F3, 0xFFE4E7EB, 0xFF15171A, 0xFF7B828B, 0xFFDDE1E6, 0xFF5A7393, 0xFF5A7393, 0xFFE9ECF0, 0xFFEEF0F3, 0xFFDCE3EC),
         compact = true,
@@ -124,7 +124,7 @@ object Looks {
 val String.kimiLike: Boolean get() = this == "kimi" || this == "cloud"
 
 /**
- * Background of a regular screen (settings, menu, lists): dim clouds for cl0udly, the background color for the rest.
+ * Background of a regular screen (settings, menu, lists): dim clouds for CeloAgents, the background color for the rest.
  * [variant] is the screen name: each has its own cloud layout.
  */
 @androidx.compose.runtime.Composable
@@ -141,7 +141,7 @@ fun androidx.compose.ui.Modifier.screenBackdrop(variant: String): androidx.compo
 @androidx.compose.runtime.Composable
 fun androidx.compose.ui.Modifier.lookBackdrop(home: Boolean = false): androidx.compose.ui.Modifier {
     val c = Oc.c
-    // cl0udly: on home and in chat the clouds are only at the top, the input area stays clean
+    // CeloAgents: on home and in chat the clouds are only at the top, the input area stays clean
     if (Oc.look.id == "cloud") return with(app.ocmobile.ui.components.CloudBackdrop) { backdrop(c.bg, c.isDark, if (home) "home" else "chat", topOnly = true) }
     if (Oc.look.id != "notebook") return this.background(c.bg)
     return this.background(c.bg).drawBehind {

@@ -316,7 +316,7 @@ fun AboutScreen(nav: Nav) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 32.dp)) {
             SettingsGroup {
                 SettingsRow("OpenCode mobile", subtitle = "v${BuildConfig.VERSION_NAME}", icon = Ic.Info)
-                if (app.ocmobile.ui.theme.Oc.look.id == "cloud") SettingsRow("cl0udly", subtitle = Graph.prefs.petCount.let { "Petted $it ${if (it == "1") "time" else "times"}" }, icon = Ic.Cloud, chevron = true, onClick = { nav.push(app.ocmobile.ui.Route.MascotSettings) })
+                if (app.ocmobile.ui.theme.Oc.look.id == "cloud") SettingsRow("CeloAgents", subtitle = Graph.prefs.petCount.let { "Petted $it ${if (it == "1") "time" else "times"}" }, icon = Ic.Cloud, chevron = true, onClick = { nav.push(app.ocmobile.ui.Route.MascotSettings) })
                 SettingsRow("Source on GitHub", subtitle = app.ocmobile.data.Updater.REPO, icon = Ic.GitHub, onClick = { open("https://github.com/" + app.ocmobile.data.Updater.REPO) })
                 SettingsRow("OpenCode (in container)", subtitle = Graph.prefs.opencodeVersion.ifBlank { "not installed" }, icon = Ic.Terminal)
                 SettingsRow("OpenCode documentation", icon = Ic.External, onClick = { open("https://opencode.ai/docs") })

@@ -163,7 +163,7 @@ fun ComposerHost(
 
     Column(modifier) {
     SlashMenu(state, nav)
-    // skills and commands in the text in the accent color (dim blue in cl0udly)
+    // skills and commands in the text in the accent color (dim blue in CeloAgents)
     val known by Graph.catalog.commands.collectAsState()
     val names = remember(known) { known.map { it.name }.toSet() }
     val skillColors = remember(names, c.accent) { SkillHighlight(names, c.accent) }

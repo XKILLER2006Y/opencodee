@@ -52,7 +52,7 @@ class Prefs(ctx: Context) {
     var wrapLines by bool("wrap_lines", false)
     var haptics by bool("haptics", true)
     var accessBannerHidden by bool("access_banner_hidden", false)  // dismissed the hint about background work and notifications
-    // the cl0udly mascot: the "cl0udly" tab in settings
+    // the CeloAgents mascot: the "CeloAgents" tab in settings
     var mascotOn by bool("mascot_on", true)
     var mascotHaptics by bool("mascot_haptics", true)
     var mascotSensors by bool("mascot_sensors", true)        // shake, tilt, upside down
@@ -61,7 +61,7 @@ class Prefs(ctx: Context) {
     var mascotMorning by bool("mascot_morning", true)
     var mascotSeasonal by bool("mascot_seasonal", true)      // snow, leaves, confetti, sneezes
     var mascotOutfit by str("mascot_outfit", "auto")        // auto, off or a holiday name
-    var mascotPersona by bool("mascot_persona", true)       // the agent introduces itself as the cl0udly cloud
+    var mascotPersona by bool("mascot_persona", true)       // the agent introduces itself as the CeloAgents cloud
     var petCount by str("pet_count", "0")             // how many times the mascot was petted
     var lastMorning by str("last_morning", "")         // the day the mascot already did its morning stretch
     var pongBest by str("pong_best", "0")              // best ping-pong rally with the mascot

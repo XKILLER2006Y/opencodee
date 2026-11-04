@@ -255,7 +255,7 @@ private fun AddDeviceSheet(onDismiss: () -> Unit) {
                     com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(ctx, opts).startScan()
                         .addOnSuccessListener { b ->
                             if (app.ocmobile.data.ConnectLink.offer(b.rawValue.orEmpty())) onDismiss()
-                            else error = "That's not a cl0udly connection code"
+                            else error = "That's not a CeloAgents connection code"
                         }
                         .addOnFailureListener { error = "The scanner isn't available. Point your camera app at the code instead." }
                 }.padding(vertical = 14.dp),

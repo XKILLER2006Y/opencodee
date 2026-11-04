@@ -233,7 +233,7 @@ private fun Shell(rt: RuntimeState) {
     ConnectPrompt(nav)
 }
 
-/** A QR code or a cl0udly://connect link: ask whether to connect, then connect. */
+/** A QR code or a celoagents://connect link: ask whether to connect, then connect. */
 @Composable
 private fun ConnectPrompt(nav: Nav) {
     val c = Oc.c

@@ -457,7 +457,7 @@ fun KimiHero(code: Boolean, typing: Boolean = false, onMore: () -> Unit) {
         if (Oc.look.id == "cloud") { if (Graph.prefs.mascotOn) PixelCloud(Modifier.size(width = 124.dp, height = 84.dp), watching = typing) }
         else KimiBall(Modifier.size(88.dp))
         Spacer(Modifier.height(22.dp))
-        // cl0udly: a new greeting every time
+        // CeloAgents: a new greeting every time
         val cloud = Oc.look.id == "cloud"
         val hello = remember(code, cloud) { if (cloud) Greetings.pick(name, code) else null }
         Txt(

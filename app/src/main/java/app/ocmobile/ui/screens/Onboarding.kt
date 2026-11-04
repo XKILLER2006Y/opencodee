@@ -86,7 +86,7 @@ import kotlinx.coroutines.launch
 
 /*
  * First launch. While the person gets to know the app, the environment (Ubuntu + OpenCode) installs in the background,
- * so by the last step everything is usually ready. First the cl0udly mascot shows how things
+ * so by the last step everything is usually ready. First the CeloAgents mascot shows how things
  * work here (five screens), then: about you and memory → your settings → permissions → account. On Start
  * the cloud calls you "into its environment" and pulls you in, through its eye straight to the home screen.
  */
@@ -384,7 +384,7 @@ private fun AccountOption(id: String, chosen: String?, ready: Boolean, icon: Ima
 private class TourPage(val say: String, val note: String)
 
 private val TOUR_PAGES = listOf(
-    TourPage("Hi! I'm cl0udly.", "A little cloud that lives on your phone. I write code, run it and chat with you — all right here, no computer needed."),
+    TourPage("Hi! I'm CeloAgents.", "A little cloud that lives on your phone. I write code, run it and chat with you — all right here, no computer needed."),
     TourPage("Just ask.", "While I work, tap the summary line to see every step: the commands I run, the files I edit, the live terminal."),
     TourPage("Got a computer?", "Run one command on it and scan the QR code in Remote devices — then I work there too, right from this phone."),
     TourPage("I don't work alone.", "For big tasks I can call helpers and run them in parallel. And I can remember what matters to you — only if you want."),
@@ -492,8 +492,8 @@ private fun SetupStep(icon: String, onIcon: (String) -> Unit) {
         Spacer(Modifier.height(18.dp))
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             SetupSwitch(Ic.Vibrate, "Vibration", "A light tap when you press things", haptics) { haptics = it; p.haptics = it }
-            SetupSwitch(Ic.Cloud, "cl0udly on the home screen", "The cloud that greets you", mascot) { mascot = it; p.mascotOn = it }
-            SetupSwitch(Ic.Chat, "The assistant is cl0udly", "It knows its name and where it lives; names its real model when asked", persona) { persona = it; p.mascotPersona = it }
+            SetupSwitch(Ic.Cloud, "CeloAgents on the home screen", "The cloud that greets you", mascot) { mascot = it; p.mascotOn = it }
+            SetupSwitch(Ic.Chat, "The assistant is CeloAgents", "It knows its name and where it lives; names its real model when asked", persona) { persona = it; p.mascotPersona = it }
             SetupSwitch(Ic.Sparkle, "Holiday outfits", "Hats, snow and confetti on the right days", outfits) { outfits = it; p.mascotOutfit = if (it) "auto" else "off" }
         }
     }

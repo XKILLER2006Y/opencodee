@@ -270,7 +270,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             }
             // agent team: helpers in the config and a note to the main agent on how to use them
             val team = if (Team.on) { Team.sync(); Team.instruction() } else null
-            // in the cl0udly look the agent is the cl0udly cloud (Persona), unless turned off
+            // in the CeloAgents look the agent is the CeloAgents cloud (Persona), unless turned off
             // anonymous chat: tell the agent not to remember anything from it
             val anon = if (isIncognito(sessionId)) "This is an anonymous chat. Do not save anything from it to memory, notes or files outside the task." else null
             api.promptAsync(sessionId, dir, parts, prefs.providerId, prefs.modelId, prefs.agent, prefs.variant, listOfNotNull(Persona.instruction(), team, anon).joinToString("\n\n").ifBlank { null })

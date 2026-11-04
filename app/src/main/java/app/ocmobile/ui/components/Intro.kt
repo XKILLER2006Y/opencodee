@@ -95,7 +95,7 @@ fun IntroHost() {
         Intro.played = true
         t.snapTo(0f); fade.snapTo(1f)
         t.animateTo(1f, tween(dur, easing = LinearEasing))
-        // cl0udly: the cloud flies over to the home screen, the exit is longer and smoother
+        // CeloAgents: the cloud flies over to the home screen, the exit is longer and smoother
         fade.animateTo(0f, if (look == "cloud") tween(700, easing = androidx.compose.animation.core.FastOutSlowInEasing) else tween(320))
         show = false
     }

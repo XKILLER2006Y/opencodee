@@ -144,8 +144,8 @@ fun SettingsScreen(nav: Nav, onMenu: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             SettingsGroup {
                 SettingsRow("Interface", subtitle = app.ocmobile.ui.theme.Looks.of(prefs.edition).title, icon = Ic.Laptop, onClick = { nav.push(Route.Edition) })
-                // the mascot tab: only in the cl0udly look
-                if (Oc.look.id == "cloud") SettingsRow("cl0udly", subtitle = "Mascot, outfits and games", icon = Ic.Cloud, onClick = { nav.push(Route.MascotSettings) })
+                // the mascot tab: only in the CeloAgents look
+                if (Oc.look.id == "cloud") SettingsRow("CeloAgents", subtitle = "Mascot, outfits and games", icon = Ic.Cloud, onClick = { nav.push(Route.MascotSettings) })
                 SettingsRow("Color mode", subtitle = prefs.colorMode.replaceFirstChar { it.uppercase() }, icon = Ic.Moon, onClick = { dialog = "color" })
                 SettingsRow("Font style", subtitle = if (prefs.fontStyle == "default") "Default" else "System", icon = Ic.FontSize, onClick = { nav.push(Route.Appearance) })
                 SettingsRow("Voice", subtitle = app.ocmobile.data.Speech.label(), icon = Ic.Waveform, onClick = { dialog = "voice" })

@@ -242,7 +242,7 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
                             )
                             // while the agent works you can go play with the mascot
                             if (busy && Oc.look.id == "cloud") Txt(
-                                "Play with cl0udly while you wait ›", size = 13.sp, color = c.textDim,
+                                "Play with CeloAgents while you wait ›", size = 13.sp, color = c.textDim,
                                 modifier = Modifier.clip(Oc.round(8.dp)).clickable { nav.push(app.ocmobile.ui.Route.Mascot) }.padding(vertical = 4.dp),
                             )
                             retries[id]?.let { RetryCard(it, nav, onStop = { scope.launch { runCatching { Graph.api.abort(id, chat.directory) } } }) }
@@ -284,7 +284,7 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
         } else Box(Modifier.navigationBarsPadding()) {
             ComposerHost(
                 state = state, nav = nav, busy = busy || sendingNow, sessionId = id,
-                placeholder = if (sendingNow) "Sending…" else if (editing != null) "Edit your message" else "Reply to ${if (app.ocmobile.data.Persona.on) "cl0udly" else "OpenCode"}…",
+                placeholder = if (sendingNow) "Sending…" else if (editing != null) "Edit your message" else "Reply to ${if (app.ocmobile.data.Persona.on) "CeloAgents" else "OpenCode"}…",
                 dashed = incognito,
                 onSend = {
                     val text = state.text.trim()

@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Intent
 import androidx.core.content.ContextCompat
 import app.ocmobile.api.OpenCodeApi
+import app.ocmobile.data.Memory
 import app.ocmobile.data.Prefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -73,7 +74,7 @@ class RuntimeController(
             }
 
             Vault.restore()
-            app.ocmobile.data.Memory.sync() // copies the default skills and writes their rules into AGENTS.md
+            Memory.sync() // copies the default skills and writes their rules into AGENTS.md
             installOpencode(OC_VERSION, OC_URL_OR(OC_VERSION), if (OC_VERSION == "1.19.4") OC_SHA else null)
             smokeTest()
 

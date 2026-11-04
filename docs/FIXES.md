@@ -33,3 +33,12 @@ Other bugs
 - `ProvidersScreen` has a Kamihub row under "Add provider" and a key sheet. Disconnect uses the normal provider disconnect.
 - A refused key (HTTP 401/403) stops before anything is written; a gateway without `/models` falls back to `alicn/deepseek-v4.1-flash` only.
 
+# Release numbering
+- The workflow runs on every push to main (docs-only pushes are ignored) and takes the version from the run number
+  (`-PappVersionCode`, `-PappVersionName` into `app/build.gradle.kts`). No tag or input to type; the tag is created at the built commit.
+
+# Rename to CeloAgents
+- App name (`app_name`, share-sheet labels), icon labels, look name, mascot tab, onboarding, assistant persona, splash letters and `tools/connect-qr.sh` all say CeloAgents.
+- Package / applicationId (`app.ocmobile`) is unchanged, so installs and updates keep working.
+- Connection links use `celoagents://connect?...`; the old `cl0udly://` links are still accepted. The release APK is named `CeloAgents-<tag>.apk`.
+

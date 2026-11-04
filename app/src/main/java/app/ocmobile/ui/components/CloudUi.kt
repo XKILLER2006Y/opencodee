@@ -61,7 +61,7 @@ import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /*
- * The cl0udly look. The mascot is the cloud from the official icon (the author's drawing): a white body,
+ * The CeloAgents look. The mascot is the cloud from the official icon (the author's drawing): a white body,
  * grey steps, two tall eyes. The sky above the bar is a still pixel ridge
  * in blue tones, dense on the left and thinning to the right, darkened toward the background.
  */
@@ -165,7 +165,7 @@ private fun rememberSteps(periodMs: Long): Int {
 }
 
 /**
- * The cl0udly cloud mascot. Floats, blinks, now and then looks around; [watching] means it looks down
+ * The CeloAgents cloud mascot. Floats, blinks, now and then looks around; [watching] means it looks down
  * at the input while someone types. While thinking, pixel rain falls under it.
  *
  * You can play with it:
@@ -677,7 +677,7 @@ private fun DrawScope.pixels(img: ImageBitmap, x: Float, y: Float, px: Float) = 
 )
 
 /**
- * The cl0udly background: a few still, dim clouds on the background color, each screen with its own
+ * The CeloAgents background: a few still, dim clouds on the background color, each screen with its own
  * layout. Images are cached by size, theme and screen.
  */
 object CloudBackdrop {
@@ -768,7 +768,7 @@ object CloudBackdrop {
 
 // ---------- splash ----------
 
-// 5×9 pixel letters for "cl0udly"
+// 5×9 pixel letters for "CeloAgents" (the old "cl0udly" letters stay for reference)
 private val GLYPHS = mapOf(
     'c' to listOf(".....", ".....", ".###.", "#...#", "#....", "#....", "#...#", ".###.", "....."),
     'l' to listOf("##...", ".#...", ".#...", ".#...", ".#...", ".#...", ".#...", "###..", "....."),
@@ -776,8 +776,16 @@ private val GLYPHS = mapOf(
     'u' to listOf(".....", ".....", "#...#", "#...#", "#...#", "#...#", "#..##", ".##.#", "....."),
     'd' to listOf("....#", "....#", ".####", "#...#", "#...#", "#...#", "#...#", ".####", "....."),
     'y' to listOf(".....", ".....", "#...#", "#...#", "#...#", "#...#", ".####", "....#", ".###."),
+    'C' to listOf(".###.", "#...#", "#....", "#....", "#....", "#....", "#...#", ".###.", "....."),
+    'e' to listOf(".....", ".....", ".###.", "#...#", "#####", "#....", "#...#", ".###.", "....."),
+    'o' to listOf(".....", ".....", ".###.", "#...#", "#...#", "#...#", "#...#", ".###.", "....."),
+    'A' to listOf(".###.", "#...#", "#...#", "#...#", "#####", "#...#", "#...#", "#...#", "....."),
+    'g' to listOf(".....", ".....", ".####", "#...#", "#...#", "#...#", ".####", "....#", ".###."),
+    'n' to listOf(".....", ".....", "#.##.", "##..#", "#...#", "#...#", "#...#", "#...#", "....."),
+    't' to listOf("....", ".#..", "####", ".#..", ".#..", ".#..", ".#.#", "..#.", "...."),
+    's' to listOf(".....", ".....", ".####", "#....", ".###.", "....#", "....#", "####.", "....."),
 )
-private val GLYPH_W = mapOf('l' to 3)
+private val GLYPH_W = mapOf('l' to 3, 't' to 4)
 
 private fun wordWidth(s: String) = s.sumOf { (GLYPH_W[it] ?: 5) + 1 } - 1
 
@@ -789,7 +797,7 @@ private fun DrawScope.drawPixelWord(s: String, left: Float, top: Float, px: Floa
         if (k <= 0f) return
         val dy = if (k < 0.5f) 2 else if (k < 1f) 1 else 0
         val g = GLYPHS[ch] ?: return@forEachIndexed
-        val col = if (ch == '0') accent else ink
+        val col = if (ch == 'o') accent else ink
         for (y in g.indices) for (x in g[y].indices) if (g[y][x] == '#')
             drawRect(col, Offset(left + (gx + x) * px, top + (y + dy) * px), Size(px, px))
         gx += (GLYPH_W[ch] ?: 5) + 1
@@ -797,8 +805,8 @@ private fun DrawScope.drawPixelWord(s: String, left: Float, top: Float, px: Floa
 }
 
 /**
- * The cl0udly splash: the cloud ridge appears from left to right, the little cloud steps down
- * and lands, blinks and looks around, the letters "cl0udly" pop up one by one, the cloud cheers.
+ * The CeloAgents splash: the cloud ridge appears from left to right, the little cloud steps down
+ * and lands, blinks and looks around, the letters "CeloAgents" pop up one by one, the cloud cheers.
  */
 @Composable
 internal fun CloudIntro(t: Float, exit: Float = 0f) {
@@ -852,7 +860,7 @@ internal fun CloudIntro(t: Float, exit: Float = 0f) {
             drawContext.canvas.restore()
         }
 
-        val word = "cl0udly"
+        val word = "CeloAgents"
         val shown = ((t - 0.5f) / 0.3f).coerceIn(0f, 1f) * word.length
         val wa = (1f - e * 2f).coerceIn(0f, 1f)
         if (wa > 0f) drawPixelWord(word, ((size.width - wordWidth(word) * px) / 2).roundToInt().toFloat(), bankTop + (gh + 6) * px + e * 60f, px, shown, c.text.copy(alpha = wa), c.accent.copy(alpha = wa))
@@ -999,7 +1007,7 @@ fun CloudWorkGlyph(work: Work, size: androidx.compose.ui.unit.Dp) {
     }
 }
 
-/** The cl0udly work indicator: the cloud at work and a label with running dots. */
+/** The CeloAgents work indicator: the cloud at work and a label with running dots. */
 @Composable
 internal fun CloudThinking(work: Work, modifier: Modifier) {
     val c = Oc.c

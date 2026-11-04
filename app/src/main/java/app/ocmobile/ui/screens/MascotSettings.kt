@@ -40,7 +40,7 @@ import app.ocmobile.ui.theme.Oc
 import app.ocmobile.ui.theme.screenBackdrop
 
 /**
- * The "cl0udly" tab in settings (only in the cl0udly look): a live preview of the mascot, what it
+ * The "CeloAgents" tab in settings (only in the CeloAgents look): a live preview of the mascot, what it
  * can do and reacts to, its outfit (by date, none, or any by hand), stats and the room.
  */
 @Composable
@@ -53,7 +53,7 @@ fun MascotSettings(nav: Nav) {
     fun toggle(set: (Boolean) -> Unit): (Boolean) -> Unit = { set(it); rev++ }
 
     Column(Modifier.fillMaxSize().screenBackdrop("MascotSettings")) {
-        TopBar("cl0udly", left = { IconBtn(Ic.Back, { nav.pop() }) })
+        TopBar("CeloAgents", left = { IconBtn(Ic.Back, { nav.pop() }) })
         key(rev) {
             Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 32.dp)) {
                 Box(Modifier.fillMaxWidth().height(170.dp), contentAlignment = Alignment.Center) {
@@ -63,12 +63,12 @@ fun MascotSettings(nav: Nav) {
 
                 SettingsGroup {
                     SettingsRow("Show on the home screen", icon = Ic.Cloud, trailing = { OcSwitch(p.mascotOn, toggle { p.mascotOn = it }) })
-                    SettingsRow("Room", subtitle = "Chat with cl0udly and play ping-pong", icon = Ic.Play, chevron = true, onClick = { nav.push(Route.Mascot) })
+                    SettingsRow("Room", subtitle = "Chat with CeloAgents and play ping-pong", icon = Ic.Play, chevron = true, onClick = { nav.push(Route.Mascot) })
                 }
 
                 SectionLabel("In chats")
                 SettingsGroup {
-                    SettingsRow("The assistant is cl0udly", subtitle = "Knows its name, that it's a cloud living in this app, and names its real model when asked", icon = Ic.Chat,
+                    SettingsRow("The assistant is CeloAgents", subtitle = "Knows its name, that it's a cloud living in this app, and names its real model when asked", icon = Ic.Chat,
                         trailing = { OcSwitch(p.mascotPersona, toggle { p.mascotPersona = it }) })
                 }
 

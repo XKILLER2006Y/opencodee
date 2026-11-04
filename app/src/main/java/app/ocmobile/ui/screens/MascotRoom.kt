@@ -83,7 +83,7 @@ fun MascotRoom(nav: Nav) {
     val statuses by Graph.chats.statuses.collectAsState()
     val busyId = statuses.entries.firstOrNull { it.value == "busy" || it.value == "retry" }?.key
     Column(Modifier.fillMaxSize().screenBackdrop("MascotRoom")) {
-        TopBar(if (playing) "Ping-pong" else "cl0udly", left = { IconBtn(Ic.Back, { if (playing) playing = false else nav.pop() }) })
+        TopBar(if (playing) "Ping-pong" else "CeloAgents", left = { IconBtn(Ic.Back, { if (playing) playing = false else nav.pop() }) })
         if (busyId != null) Row(
             Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(Oc.round(14.dp)).border(1.dp, c.border, Oc.round(14.dp))
                 .tap(scale = 0.98f) { nav.openChat(busyId) }.padding(horizontal = 14.dp, vertical = 10.dp),

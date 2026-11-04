@@ -1,7 +1,7 @@
 package app.ocmobile.ui.components
 
 /**
- * cl0udly greetings on home: cloud puns, developer jokes and short nods
+ * CeloAgents greetings on home: cloud puns, developer jokes and short nods
  * to films and games (retold in our own words, no quotes longer than a couple of words).
  * The first line has the name if there is one ({name}), the second is a question or a tease.
  * A new one on every visit.
@@ -28,7 +28,7 @@ object Greetings {
         "Floating around, {name}." to "What's up?",
         "Feeling fluffy today." to "You?",
         "Light drizzle of ideas." to "Want one?",
-        "Cumulus. Nimbus." to "cl0udly.",
+        "Cumulus. Nimbus." to "CeloAgents.",
         "Brewing a storm" to "of features.",
         "The cloud is just someone else's phone." to "This time it's yours.",
         "Hello, world." to "Hello, {name}.",
@@ -50,7 +50,7 @@ object Greetings {
         "Keep your friends close" to "and your backups closer.",
         "All your base" to "are belong to you, {name}.",
         "Have you tried turning it off" to "and on again?",
-        "It's a-me, cl0udly." to "Let's-a go!",
+        "It's a-me, CeloAgents." to "Let's-a go!",
         "Hey, listen!" to "I've got time for a task.",
         "Do a barrel roll," to "then tell me what to do.",
         "Snake? Snake?!" to "Oh, it's just Python.",
@@ -59,7 +59,7 @@ object Greetings {
         "Partly cloudy," to "fully ready.",
         "No rain today." to "Unless you want a waterfall chart.",
         "Somewhere over the rainbow," to "a build turned green.",
-        "First rule of cl0udly:" to "you always talk about your task.",
+        "First rule of CeloAgents:" to "you always talk about your task.",
         "Is this the real life?" to "Is this just a prompt?",
         "Hi, {name}!" to "I promise I'm not a ghost.",
         "I came, I saw," to "I compiled.",

@@ -32,7 +32,7 @@ Current version: **v0.0.1 beta-4**. Android 8+, arm64. Unofficial client.
 
 **Interrupted tasks.** If Android kills the server in the middle of a task, the chat offers Continue or Cancel when you come back. Progress can also be shown on the lock screen, with Allow and Deny buttons for permission requests.
 
-**Interfaces.** The default look is cl0udly: graphite with quiet pixel clouds and a small cloud that acts out what the agent is doing. It reacts to taps, petting, shaking and charging, dresses up for holidays and has its own room with ping-pong. In this look the assistant introduces itself as cl0udly and names its real model when asked. All of it can be tuned in Settings → cl0udly. Several other looks are in Settings, including OpenCode Desktop and OpenCode Terminal. The app icon can follow the look.
+**Interfaces.** The default look is CeloAgents: graphite with quiet pixel clouds and a small cloud that acts out what the agent is doing. It reacts to taps, petting, shaking and charging, dresses up for holidays and has its own room with ping-pong. In this look the assistant introduces itself as CeloAgents and names its real model when asked. All of it can be tuned in Settings → CeloAgents. Several other looks are in Settings, including OpenCode Desktop and OpenCode Terminal. The app icon can follow the look.
 
 **Your computer.** Remote devices → Add device → Scan QR code. On the computer run `curl -fsSL https://raw.githubusercontent.com/mistqkw/opencode-mobile/main/tools/connect-qr.sh | sh`: it starts OpenCode 1.x on your local network with a new password and prints a QR code. The phone and computer need to be on the same network.
 
@@ -76,7 +76,7 @@ OpenCode is pinned to 1.19.4 (`RuntimeController.OC_VERSION`), the version the c
 ./gradlew :app:assembleDebug
 ```
 
-JDK 21 is required. Release builds are made by GitHub Actions when a `v*` tag is pushed (`.github/workflows/release.yml`).
+JDK 21 is required. Release builds are made by GitHub Actions on every push to `main` (`.github/workflows/release.yml`). The version is the run number: run #5 publishes `v0.0.1-beta-5` (versionName `0.0.1 beta-5`, versionCode 5), nothing to type in. Set the repository variable `VERSION_OFFSET` to shift the number.
 The workflow runs the unit tests, builds, signs with `keystore/release.jks` (kept in this private repo, see `keystore/README.md`),
 checks the signature and publishes the APK with a `.sha256` file.
 

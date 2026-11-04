@@ -65,8 +65,8 @@ fun DrawerContent(nav: Nav, close: () -> Unit) {
                 val navs = if (Oc.look.id.kimiLike)
                     // Kimi: sections with labels like in their menu, plus memory
                     listOf(Triple("Scheduled tasks", Ic.Clock2, Route.Scheduled), Triple("Remote devices", Ic.Laptop, Route.Code), Triple("Projects", Ic.Folder, Route.Projects), Triple("Artifacts", Ic.Puzzle, Route.Artifacts), Triple("Memory", Ic.Sparkle, Route.Memory)) +
-                        // cl0udly has its own room: chat and play while the agent works
-                        (if (Oc.look.id == "cloud") listOf(Triple("cl0udly", Ic.Cloud, Route.Mascot)) else emptyList())
+                        // CeloAgents has its own room: chat and play while the agent works
+                        (if (Oc.look.id == "cloud") listOf(Triple("CeloAgents", Ic.Cloud, Route.Mascot)) else emptyList())
                 else listOf(Triple("Projects", Ic.Folder, Route.Projects), Triple("Code", Ic.Code, Route.Code), Triple("Artifacts", Ic.Puzzle, Route.Artifacts), Triple("Scheduled", Ic.Clock2, Route.Scheduled))
                 if (Oc.look.id == "cards") {
                     // Cards: sections as 2×2 tiles
@@ -164,7 +164,7 @@ private fun DrawerHeader(go: (Route) -> Unit) {
             Avatar(44.dp) { go(Route.Settings) }
             Spacer(Modifier.width(14.dp))
             Txt(Graph.prefs.userName.ifBlank { "OpenCode" }, Modifier.weight(1f), size = 19.sp, weight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
-            // cl0udly: settings at the top, new chat at the bottom by the search
+            // CeloAgents: settings at the top, new chat at the bottom by the search
             if (Oc.look.id == "cloud") app.ocmobile.ui.components.KimiCircleBtn(Ic.Sliders, { go(Route.Settings) }, size = 48.dp)
             else app.ocmobile.ui.components.KimiCircleBtn(Ic.Edit, { go(Route.Home) }, size = 48.dp)
         }
@@ -220,7 +220,7 @@ private fun SessionRow(s: Session, status: String?, nav: Nav, close: () -> Unit)
             }
             Spacer(Modifier.width(14.dp))
         } else if (Oc.look.id == "cloud") {
-            // cl0udly: icon by chat type
+            // CeloAgents: icon by chat type
             Ico(
                 when (app.ocmobile.data.ChatKind.of(s)) {
                     app.ocmobile.data.ChatKind.Code -> Ic.Code

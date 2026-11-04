@@ -225,7 +225,7 @@ fun AssistantBlock(m: ChatMessage, last: Boolean, onImage: (String) -> Unit, onL
                 }
                 if (bits.isNotEmpty()) Txt(bits.joinToString(" · "), size = 13.sp, color = c.textDim)
             }
-            if (last) Txt((if (app.ocmobile.data.Persona.on) "cl0udly" else "OpenCode") + " can make mistakes. Check important changes.", size = 13.sp, color = c.textDim, modifier = Modifier.padding(top = 2.dp))
+            if (last) Txt((if (app.ocmobile.data.Persona.on) "CeloAgents" else "OpenCode") + " can make mistakes. Check important changes.", size = 13.sp, color = c.textDim, modifier = Modifier.padding(top = 2.dp))
         } }
     }
     Column(Modifier.fillMaxWidth()) {
