@@ -76,7 +76,9 @@ object CustomProviders {
         runCatching { Graph.api.setApiKey(p.id, key) }
         runCatching { Graph.api.disposeAll() }
         runCatching { Graph.catalog.refresh() }
-        Vault.save()
+        // Auto-select the first model so the user can start chatting immediately.
+        val firstModel = models.keys().asSequence().mapNotNull { models.optJSONObject(it)?.optString("name") }.firstOrNull() ?: p.exampleModel
+        FreeModels.finish(p.id, firstModel)
         models.length()
     }
 

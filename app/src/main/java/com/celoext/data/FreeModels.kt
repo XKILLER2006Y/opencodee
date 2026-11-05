@@ -109,7 +109,7 @@ object FreeModels {
         Vault.save()
     }
 
-    private suspend fun finish(providerId: String, modelId: String) {
+    suspend fun finish(providerId: String, modelId: String) {
         runCatching { Graph.api.disposeAll() }
         runCatching { Graph.catalog.refresh() }
         Graph.prefs.providerId = providerId; Graph.prefs.modelId = modelId; Graph.prefs.variant = ""
