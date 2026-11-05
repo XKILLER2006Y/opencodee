@@ -47,7 +47,10 @@ class RuntimeController(
     @Volatile private var stopRequested = false
     @Volatile private var installing = false
 
-    fun logLine(s: String) = log.update { (it + s).takeLast(600) }
+    fun logLine(s: String) {
+        android.util.Log.w("CeloOC", s)
+        log.update { (it + s).takeLast(600) }
+    }
 
     // ---------- install ----------
 

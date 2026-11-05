@@ -175,6 +175,7 @@ fun Onboarding() {
             }
             Spacer(Modifier.height(12.dp))
             SetupLine(rt)
+            if (rt is RuntimeState.Crashed || rt is RuntimeState.Starting || rt is RuntimeState.InstallFailed) LogTail()
         }
     }
     entering?.let { acc -> EnterCloud { finishNow(acc) } }
@@ -554,4 +555,14 @@ private fun EnterCloud(onDone: () -> Unit) {
             }
         }
     }
+}
+
+/** Last server log lines, so a stuck setup can be diagnosed without reaching Settings. */
+@Composable
+private fun LogTail() {
+    val c = Oc.c
+    val lines by Graph.runtime.log.collectAsState()
+    if (lines.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Txt(lines.takeLast(10).joinToString("\n"), Modifier.fillMaxWidth(), size = 10.sp, color = c.textDim, maxLines = 14)
 }

@@ -113,10 +113,18 @@ class OpenCodeApi(private val prefs: Prefs) {
 
     private val healthHttp by lazy { http.newBuilder().callTimeout(2, TimeUnit.SECONDS).build() }
 
-    suspend fun healthVersionOrThrow(): String? = healthHttp.newCall(request("/api/info").build()).await().use { r ->
-        val text = withContext(Dispatchers.IO) { r.body.string() }
-        if (!r.isSuccessful) throw ApiException(r.code, "health ${r.code}")
-        (runCatching { OcJson.parseToJsonElement(text) as? JsonObject }.getOrNull())?.str("version")
+    suspend fun healthVersionOrThrow(): String? {
+        var last: Exception? = null
+        for (path in listOf("/api/info", "/api/health", "/global/health")) {
+            try {
+                return healthHttp.newCall(request(path).build()).await().use { r ->
+                    val text = withContext(Dispatchers.IO) { r.body.string() }
+                    if (!r.isSuccessful) throw ApiException(r.code, "health $path ${r.code}")
+                    (runCatching { OcJson.parseToJsonElement(text) as? JsonObject }.getOrNull())?.str("version") ?: "2.x"
+                }
+            } catch (e: Exception) { last = e }
+        }
+        throw last ?: ApiException(-1, "health failed")
     }
 
     suspend fun reachable(url: String, password: String): String? = try {
