@@ -149,7 +149,8 @@ fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
                                 // desktop: a dim label without captions, project chips under the input
                                 com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.32f })
                             } else {
-                                com.celoext.ui.components.LiveCat(typing = state.text.isNotEmpty())
+                                // just the "opencode" wordmark (no mascot) with the current mode/model under it
+                                com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.55f })
                                 Spacer(Modifier.height(20.dp))
                                 ModeLine(code)
                             }

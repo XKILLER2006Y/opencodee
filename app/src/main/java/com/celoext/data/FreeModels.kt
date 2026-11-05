@@ -59,8 +59,32 @@ object FreeModels {
             // OpenCode 2.x global config uses the plural `providers` namespace.
             patch.put("providers", JSONObject().put(providerId, block))
         }
-        Graph.api.patchGlobalConfig(com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject)
+        val jsonPatch = com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject
+        try {
+            Graph.api.patchGlobalConfig(jsonPatch)
+        } catch (e: Exception) {
+            // The server's config write answered an error (seen as a bare "HTTP 500" with Kamihub). The config is a plain
+            // JSON file in the environment, so merge the block into it directly and let the server reload it.
+            if (Graph.devices.isRemote || !mergeIntoFile(patch)) throw IllegalStateException("Saving the provider config failed: ${e.message ?: e.javaClass.simpleName}")
+            runCatching { Graph.api.disposeAll() }
+        }
     }
+
+    private fun mergeIntoFile(patch: JSONObject): Boolean = runCatching {
+        val f = configFile
+        val root = if (f.exists() && f.readText().isNotBlank()) JSONObject(f.readText()) else JSONObject()
+        fun merge(into: JSONObject, from: JSONObject) {
+            for (k in from.keys()) {
+                val v = from.get(k)
+                val cur = into.opt(k)
+                if (v is JSONObject && cur is JSONObject) merge(cur, v) else into.put(k, v)
+            }
+        }
+        merge(root, patch)
+        f.parentFile?.mkdirs()
+        f.writeText(root.toString(2))
+        true
+    }.getOrDefault(false)
 
     /** Copilot models that answer on the free plan via /chat/completions. */
     /** [select] = false: only add the models without changing the selected one (GitHub sign-in shouldn't force Copilot). */

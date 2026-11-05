@@ -164,7 +164,10 @@ class Chat(val id: String, private val api: OpenCodeApi) {
     /** Message ids grow over time, so the order is lexicographic. */
     private fun insert(m: ChatMessage): ChatMessage {
         var i = messages.size
-        while (i > 0 && messages[i - 1].id > m.id) i--
+        // OpenCode 2.x sends no event for the user's own message, so the "local" bubble (id zzzz-local-…) stays until the
+        // next reload. Anything arriving over SSE happened after it, so never walk back past it: otherwise the reply
+        // lands above the question.
+        while (i > 0 && !messages[i - 1].id.startsWith("zzzz-local-") && messages[i - 1].id > m.id) i--
         messages.add(i, m)
         return m
     }
