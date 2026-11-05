@@ -77,7 +77,7 @@ class Chat(val id: String, private val api: OpenCodeApi) {
 
     suspend fun load() {
         try {
-            val list = api.messages(id, directory, 400)
+            val list = api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT)
             val fresh = list.map { m -> ChatMessage(m.info.id, m.info).also { it.parts.addAll(m.parts) } }
             val locals = messages.filter { it.id.startsWith("zzzz-local-") }
             messages.clear()

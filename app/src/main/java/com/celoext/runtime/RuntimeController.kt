@@ -170,6 +170,11 @@ class RuntimeController(
         var windowStart = System.currentTimeMillis()
         while (isActive && !stopRequested) {
             state.value = RuntimeState.Starting
+            // leftovers from the run before (or a crash) would keep the port: pkill -f opencode first
+            killLeftoverServer()
+            var waited = 0
+            while (isActive && portBusy() && waited < 8_000) { delay(250); waited += 250 }
+            if (waited > 0) logLine("Waited ${waited}ms for the port to be free")
             val pb = proot.processBuilder(
                 listOf(OC_BIN, "serve", "--hostname", "127.0.0.1", "--port", prefs.serverPort),
                 cwd = "/root/work",
@@ -236,10 +241,54 @@ class RuntimeController(
     /** The server process is still alive (after stopServer it doesn't exit right away). */
     val serverAlive get() = process != null
 
+    /** Something is still listening on the server port (a leftover `opencode serve` from an earlier run). */
+    fun portBusy(): Boolean = try {
+        java.net.Socket().use { s -> s.connect(java.net.InetSocketAddress("127.0.0.1", prefs.serverPort), 300); true }
+    } catch (e: Exception) { false }
+
+    /**
+     * `pkill -f opencode` inside Ubuntu, plus a sweep of whatever proot left behind on the phone.
+     * Destroying the process only kills the proot client: the guest `opencode serve` often survives,
+     * keeps the port and answers the health check, so a restart looks fine while the new server never binds.
+     * The pattern is written `[o]pencode` so it doesn't match this command's own line.
+     */
+    fun killLeftoverServer() {
+        runCatching {
+            val p = proot.processBuilder(
+                listOf("/bin/sh", "-c", "pkill -f '[o]pencode'; sleep 0.4; pkill -9 -f '[o]pencode'; exit 0"),
+                cwd = "/root",
+            ).start()
+            if (!p.waitFor(8, TimeUnit.SECONDS)) p.destroyForcibly()
+        }
+        if (prefs.rootMode) runCatching { Root.run("pkill -f '[o]pencode'", 10) }
+        // the host side: the proot wrapper and the guest binary itself (same UID, so no root needed)
+        runCatching {
+            ProcessHandle.allProcesses().forEach { ph ->
+                val cmd = runCatching { ph.info().commandLine().orElse("") }.getOrDefault("")
+                if (cmd.contains("opencode") && !cmd.contains("pkill") && !cmd.contains("com.celoext")) {
+                    runCatching { ph.destroy() }
+                }
+            }
+        }
+    }
+
     fun requestStop() {
         stopRequested = true
         process?.destroy()
         if (prefs.rootMode) Thread { Root.killProot(paths.rootfs.path) }.start()
+        // in the background: starting a proot takes a moment and this can be called from the main thread
+        Thread { killLeftoverServer() }.apply { isDaemon = true }.start()
+    }
+
+    /** Stop, wait until the port is really free, start again (Restart button, root-mode switch). */
+    fun restartServer() {
+        stopServer()
+        Thread {
+            var waited = 0
+            while (waited < 10_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
+            killLeftoverServer()
+            startServer()
+        }.apply { isDaemon = true }.start()
     }
 
     /** Switch root mode on/off: asks for root first; when turning it off, files made as root go back to the app. */

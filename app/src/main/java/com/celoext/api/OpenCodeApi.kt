@@ -37,6 +37,12 @@ class ApiException(val code: Int, message: String) : IOException(message)
 
 /** REST API client for OpenCode 2.2.5 with v1 compatibility translation layer. */
 class OpenCodeApi(private val prefs: Prefs) {
+    companion object {
+        /** The server rejects any `limit` above 200 ("Expected a value less than or equal to 200"), so never send more. */
+        const val MAX_LIMIT = 200
+        fun pageLimit(n: Int) = n.coerceIn(1, MAX_LIMIT)
+    }
+
     val baseUrl get() = Graph.devices.active()?.url ?: "http://127.0.0.1:${prefs.serverPort}"
     private val password get() = Graph.devices.active()?.password ?: prefs.serverPassword
     private val jsonType = "application/json".toMediaType()
@@ -156,8 +162,8 @@ class OpenCodeApi(private val prefs: Prefs) {
 
     // ---------- sessions ----------
 
-    suspend fun listSessions(directory: String? = null, limit: Int = 300, search: String? = null): List<Session> {
-        val q = dir(directory) + mapOf("limit" to limit.toString(), "search" to search)
+    suspend fun listSessions(directory: String? = null, limit: Int = MAX_LIMIT, search: String? = null): List<Session> {
+        val q = dir(directory) + mapOf("limit" to pageLimit(limit).toString(), "search" to search)
         val res = call("GET", "/api/session", q)
         val arr = (res as? JsonObject)?.arr("data") ?: res as? JsonArray ?: JsonArray(emptyList())
         return arr.mapNotNull { (it as? JsonObject)?.let(::parseSession) }
@@ -236,8 +242,8 @@ class OpenCodeApi(private val prefs: Prefs) {
         }.toMap()
     }
 
-    suspend fun messages(id: String, directory: String?, limit: Int = 300): List<MessageWithParts> {
-        val res = call("GET", "/api/session/$id/message", loc(directory) + mapOf("limit" to limit.toString()))
+    suspend fun messages(id: String, directory: String?, limit: Int = MAX_LIMIT): List<MessageWithParts> {
+        val res = call("GET", "/api/session/$id/message", loc(directory) + mapOf("limit" to pageLimit(limit).toString()))
             ?: JsonArray(emptyList())
         return parseMessages(res, defaultSessionID = id)
     }

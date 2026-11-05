@@ -167,7 +167,7 @@ fun ServerScreen(nav: Nav) {
                 Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (rt is RuntimeState.Running || rt is RuntimeState.Starting) SmallButton("Stop", { Graph.runtime.stopServer() }, danger = true)
                     else SmallButton("Start", { Graph.runtime.startServer() }, filled = true)
-                    SmallButton("Restart", { Graph.runtime.stopServer(); scope.launch { kotlinx.coroutines.delay(1200); Graph.runtime.startServer() } })
+                    SmallButton("Restart", { Graph.runtime.restartServer() })
                     SmallButton("Log", { showLog = true })
                 }
             }
@@ -180,7 +180,7 @@ fun ServerScreen(nav: Nav) {
                         scope.launch {
                             val ok = Graph.runtime.setRootMode(on)
                             if (!ok) Graph.chats.toasts.tryEmit("Root was not granted (no su, or you tapped Deny)")
-                            else { Graph.runtime.stopServer(); kotlinx.coroutines.delay(1500); Graph.runtime.startServer() }
+                            else Graph.runtime.restartServer()
                         }
                     }
                 })

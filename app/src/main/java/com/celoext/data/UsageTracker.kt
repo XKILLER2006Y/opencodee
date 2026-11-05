@@ -94,10 +94,10 @@ class UsageTracker(
         refreshing.value = true
         try {
             val since = System.currentTimeMillis() - 31L * DAY
-            val list = api.listSessions(limit = 500).filter { it.time.updated >= since }
+            val list = api.listSessions(limit = com.celoext.api.OpenCodeApi.MAX_LIMIT).filter { it.time.updated >= since }
             for (s in list) {
                 if ((backfilled[s.id] ?: 0) >= s.time.updated) continue
-                val msgs = runCatching { api.messages(s.id, s.directory, 1000) }.getOrNull() ?: continue
+                val msgs = runCatching { api.messages(s.id, s.directory, com.celoext.api.OpenCodeApi.MAX_LIMIT) }.getOrNull() ?: continue
                 for (m in msgs) if (!m.info.isUser) {
                     record(
                         buildJsonObject {
