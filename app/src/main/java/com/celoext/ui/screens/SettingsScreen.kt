@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +16,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import kotlinx.coroutines.launch
@@ -38,7 +36,6 @@ import com.celoext.runtime.RuntimeState
 import com.celoext.ui.Nav
 import com.celoext.ui.Route
 import com.celoext.ui.components.ChoiceRow
-import com.celoext.ui.components.Chip
 import com.celoext.ui.components.Ico
 import com.celoext.ui.components.IconBtn
 import com.celoext.ui.components.ModelSheet
@@ -46,12 +43,10 @@ import com.celoext.ui.components.OcSwitch
 import com.celoext.ui.components.OcTextField
 import com.celoext.ui.components.OcDialog
 import com.celoext.ui.components.Pill
-import com.celoext.ui.components.SectionLabel
 import com.celoext.ui.components.SettingsGroup
 import com.celoext.ui.components.SettingsRow
 import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
-import com.celoext.ui.theme.AppIcons
 import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
 
@@ -76,7 +71,6 @@ fun SettingsScreen(nav: Nav, onMenu: () -> Unit) {
     val providers by Graph.catalog.providers.collectAsState()
     var dialog by remember { mutableStateOf<String?>(null) }
     var modelSheet by remember { mutableStateOf(false) }
-    var iconSheet by remember { mutableStateOf(false) }
     val hasGo = providers.any { it.id == "opencode-go" }
     val modelLabel = Graph.catalog.selectedLabel()
     val serverText = when (rt) {
@@ -158,7 +152,6 @@ fun SettingsScreen(nav: Nav, onMenu: () -> Unit) {
                 SettingsRow("Notifications", icon = Ic.Bell, onClick = {
                     ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                 })
-                SettingsRow("App icon", subtitle = AppIcons.all.firstOrNull { it.id == prefs.appIcon }?.label, icon = Ic.Image, onClick = { iconSheet = true })
             }
             Spacer(Modifier.height(16.dp))
             SettingsGroup {
@@ -190,7 +183,6 @@ fun SettingsScreen(nav: Nav, onMenu: () -> Unit) {
         "code" -> ChoiceDialog("Code font", listOf(Triple("mono", "Monospace", null), Triple("system", "System", null)), prefs.codeFont, { prefs.codeFont = it }) { dialog = null }
     }
     if (modelSheet) ModelSheet { modelSheet = false }
-    if (iconSheet) IconPickerSheet { iconSheet = false }
 }
 
 /** "Capabilities": model, memory, agents, skills, what Claude keeps in the section of the same name. */

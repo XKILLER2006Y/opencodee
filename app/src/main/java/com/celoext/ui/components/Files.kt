@@ -68,7 +68,6 @@ import java.io.File
  * audio plays right in the chat, video and images get a preview, the rest can be opened, saved or shared.
  */
 object OutFiles {
-    const val OUTBOX = "/root/outbox"
     private val linkRe = Regex("""\]\((/[^)\s]+)\)""")
     private val tickRe = Regex("""`(/[^`\s]+)`""")
     private val lineRe = Regex("""(?m)^\s*(?:📎\s*)?(/[^\s`*]+)\s*$""")

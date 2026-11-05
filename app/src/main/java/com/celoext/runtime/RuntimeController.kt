@@ -47,7 +47,10 @@ class RuntimeController(
     @Volatile private var stopRequested = false
     @Volatile private var installing = false
 
-    fun logLine(s: String) = log.update { (it + s).takeLast(600) }
+    fun logLine(s: String) {
+        android.util.Log.w("CeloOC", s)
+        log.update { (it + s).takeLast(600) }
+    }
 
     // ---------- install ----------
 
@@ -167,6 +170,17 @@ class RuntimeController(
         var windowStart = System.currentTimeMillis()
         while (isActive && !stopRequested) {
             state.value = RuntimeState.Starting
+            // leftovers from the run before (or a crash) would keep the port: pkill -f opencode first
+            killLeftoverServer()
+            var waited = 0
+            while (isActive && portBusy() && waited < 8_000) { delay(250); waited += 250 }
+            if (waited > 0) logLine("Waited ${waited}ms for the port to be free")
+            // root mode: files the server made as real root (0600) would lock the app out of its own config
+            if (prefs.rootMode) runCatching {
+                val uid = android.os.Process.myUid()
+                val dirs = listOf("root/.config", "root/.local", "root/work").map { File(paths.rootfs, it) }.filter { it.exists() }
+                if (dirs.isNotEmpty()) Root.run(dirs.joinToString("; ") { "chown -R $uid:$uid ${Root.quote(it.path)}; chmod -R u+rwX ${Root.quote(it.path)}" }, 90)
+            }
             val pb = proot.processBuilder(
                 listOf(OC_BIN, "serve", "--hostname", "127.0.0.1", "--port", prefs.serverPort),
                 cwd = "/root/work",
@@ -233,21 +247,77 @@ class RuntimeController(
     /** The server process is still alive (after stopServer it doesn't exit right away). */
     val serverAlive get() = process != null
 
+    /** Something is still listening on the server port (a leftover `opencode serve` from an earlier run). */
+    fun portBusy(): Boolean {
+        val port = prefs.serverPort.toIntOrNull()?.takeIf { it in 1..65535 } ?: return false
+        return try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 300)
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Stop leftover OpenCode processes inside the Ubuntu guest.
+     *
+     * Guest cleanup runs through pkill inside proot (or Root in root mode).
+     * The tracked proot client is stopped by requestStop(). Avoid desktop-JVM-only
+     * process enumeration APIs because they are unavailable on Android's runtime.
+     * The pattern is written `[o]pencode` so it doesn't match this command's own line.
+     */
+    fun killLeftoverServer() {
+        runCatching {
+            val p = proot.processBuilder(
+                listOf("/bin/sh", "-c", "pkill -f '[o]pencode'; sleep 0.4; pkill -9 -f '[o]pencode'; exit 0"),
+                cwd = "/root",
+            ).start()
+            if (!p.waitFor(8, TimeUnit.SECONDS)) p.destroyForcibly()
+        }
+        if (prefs.rootMode) runCatching { Root.run("pkill -f '[o]pencode'", 10) }
+    }
+
     fun requestStop() {
         stopRequested = true
         process?.destroy()
         if (prefs.rootMode) Thread { Root.killProot(paths.rootfs.path) }.start()
+        // in the background: starting a proot takes a moment and this can be called from the main thread
+        Thread { killLeftoverServer() }.apply { isDaemon = true }.start()
     }
 
-    /** Switch root mode on/off: asks for root first; when turning it off, files made as root go back to the app. */
+    /** Stop, wait until the port is really free, start again (Restart button, root-mode switch). */
+    /**
+     * Stops the server, kills whatever is left (`pkill -f opencode`, in the mode that started it), runs [beforeStart]
+     * (for settings that must change only once the old process is gone) and starts it again.
+     */
+    fun restartServer(beforeStart: () -> Unit = {}) {
+        stopServer()
+        Thread {
+            var waited = 0
+            while (waited < 10_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
+            killLeftoverServer()
+            if (prefs.rootMode) Root.killProot(paths.rootfs.path)
+            runCatching { beforeStart() }
+            startServer()
+        }.apply { isDaemon = true }.start()
+    }
+
+    /**
+     * Switch root mode on/off. Asks for root first. The running server is killed in the OLD mode before the switch
+     * (a root process can't be killed from the app, and the other way round), then files made as root go back to the app
+     * when turning it off, and the server starts again in the new mode.
+     */
     suspend fun setRootMode(on: Boolean): Boolean = withContext(Dispatchers.IO) {
-        if (on) {
-            if (!Root.check()) return@withContext false
-            Root.forgetProbe(); prefs.rootMode = true
-        } else {
+        if (on && !Root.check()) return@withContext false
+        restartServer {
             val was = prefs.rootMode
-            prefs.rootMode = false
-            if (was) Root.handBack(app.filesDir.path, android.os.Process.myUid())
+            if (on) { Root.forgetProbe(); prefs.rootMode = true }
+            else {
+                prefs.rootMode = false
+                if (was) Root.handBack(app.filesDir.path, android.os.Process.myUid())
+            }
         }
         true
     }

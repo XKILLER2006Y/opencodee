@@ -70,11 +70,11 @@ object Ic {
     val Sparkle by lazy { icon("sparkle", "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z") }
     val Download by lazy { icon("download", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M7 10l5 5 5-5", "M12 15V3") }
     val Server by lazy { icon("server", "M4 3h16a1 1 0 0 1 1 1v6H3V4a1 1 0 0 1 1-1z", "M3 14h18v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M7 7h.01", "M7 17h.01") }
+    val Router by lazy { icon("router", "M4 12h16M4 16h16M12 4v4M12 18v4M6.7 7.3a8 8 0 0 0 0 9.4M17.3 7.3a8 8 0 0 1 0 9.4") }
     val Key by lazy { icon("key", "M15 3a6 6 0 1 0 0 12a6 6 0 0 0 0-12z", "M10.8 13.2L3 21", "M7 17l2 2", "M5 19l2 2") }
     val Zap by lazy { icon("zap", "M13 2L3 14h8l-1 8 10-12h-8z") }
     val Stop by lazy { icon("stop", "M7 7h10v10H7z") }
     val More by lazy { icon("more", "M12 5h.01", "M12 12h.01", "M12 19h.01") }
-    val Eye by lazy { icon("eye", "M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z", "M12 9a3 3 0 1 0 0 6a3 3 0 0 0 0-6z") }
     val FilePlus by lazy { icon("file_plus", "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z", "M14 3v5h5", "M12 12v6", "M9 15h6") }
     val Diff by lazy { icon("diff", "M12 3v10", "M7 8h10", "M7 19h10") }
     val Git by lazy { icon("git", "M6 3v12", "M18 9a3 3 0 1 0 0 .01", "M6 18a3 3 0 1 0 0 .01", "M18 12a9 9 0 0 1-9 9") }
@@ -104,7 +104,6 @@ object Ic {
     val TextSelect by lazy { icon("textsel", "M5 4h2", "M5 20h2", "M6 4v16", "M11 7h8", "M11 12h8", "M11 17h5") }
     val Reply by lazy { icon("reply", "M9 14L4 9l5-5", "M4 9h10a6 6 0 0 1 6 6v4") }
     val Waveform by lazy { icon("waveform", "M4 10v4", "M8 7v10", "M12 4v16", "M16 7v10", "M20 10v4") }
-    val Mic2 by lazy { icon("mic2", "M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z", "M5 11a7 7 0 0 0 14 0", "M12 18v3") }
     val VolumeOff by lazy { icon("volumeoff", "M11 5L6 9H3v6h3l5 4z", "M22 9l-6 6", "M16 9l6 6") }
     val MicOff by lazy { icon("micoff", "M3 3l18 18", "M9 9v3a3 3 0 0 0 5.1 2.1", "M15 9.3V5a3 3 0 0 0-5.9-.7", "M19 10v1a7 7 0 0 1-1 3.6", "M5 10v1a7 7 0 0 0 11.3 5.5", "M12 18v4", "M8 22h8") }
     val FontSize by lazy { icon("fontsize", "M4 7V5h10v2", "M9 5v14", "M7 19h4", "M14 12v-1h7v1", "M17.5 11v8", "M16 19h3") }

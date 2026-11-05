@@ -26,7 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -38,13 +37,10 @@ import com.celoext.ui.Nav
 import com.celoext.ui.components.IconBtn
 import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
-import com.celoext.ui.theme.DesktopDark
-import com.celoext.ui.theme.DarkColors
 import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.InterFamily
 import com.celoext.ui.theme.Oc
 import com.celoext.ui.theme.OcColors
-import com.celoext.ui.theme.TerminalDark
 import com.celoext.ui.theme.Look
 import com.celoext.ui.theme.Looks
 import com.celoext.ui.theme.SerifDisplay
@@ -80,20 +76,14 @@ fun EditionScreen(nav: Nav) {
                 }
             }
             Txt("Colors, fonts and corners switch right away. Light and dark mode work in every interface.", Modifier.padding(horizontal = 6.dp, vertical = 6.dp), size = 13.sp, color = c.textDim, lineHeight = 19.sp)
-            // intro animation and icon for the chosen look
+            // intro animation
             val ctx = androidx.compose.ui.platform.LocalContext.current
             var intro by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Graph.prefs.introEnabled) }
-            val match = com.celoext.ui.theme.AppIcons.all.firstOrNull { it.id == "look_" + Graph.prefs.edition }
             com.celoext.ui.components.SettingsGroup(Modifier.padding(top = 4.dp)) {
                 com.celoext.ui.components.SettingsRow("Launch animation", subtitle = "Plays when the app starts; tap to skip", icon = Ic.Play, trailing = {
                     com.celoext.ui.components.OcSwitch(intro) { intro = it; Graph.prefs.introEnabled = it }
                 })
                 com.celoext.ui.components.SettingsRow("Play it now", icon = Ic.Sparkle, onClick = { com.celoext.ui.components.Intro.replay.intValue++ })
-                if (match != null) com.celoext.ui.components.SettingsRow(
-                    if (Graph.prefs.appIcon == match.id) "Icon matches this interface" else "Use the ${match.label} icon",
-                    subtitle = "Any icon can still be picked in Settings → App icon", icon = Ic.Image,
-                    onClick = { Graph.prefs.appIcon = match.id; com.celoext.ui.theme.AppIcons.apply(ctx, match.id) },
-                )
             }
         }
     }

@@ -22,11 +22,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalDrawerSheet
@@ -78,6 +75,7 @@ import com.celoext.ui.screens.ProjectsScreen
 import com.celoext.ui.screens.ProvidersScreen
 import com.celoext.ui.screens.RecentsScreen
 import com.celoext.ui.screens.ServerScreen
+import com.celoext.ui.screens.NineRouterScreen
 import com.celoext.ui.screens.SettingsScreen
 import com.celoext.ui.screens.SetupScreen
 import com.celoext.ui.screens.SkillsScreen
@@ -147,6 +145,16 @@ private fun Shell(rt: RuntimeState) {
     LaunchedEffect(rt) {
         if (!autostarted && rt is RuntimeState.Stopped && Graph.prefs.autoStartServer) { autostarted = true; Graph.runtime.startServer() }
     }
+    // 9Router starts with the app when the user asked for it (it runs in the same environment).
+    val nrSt by Graph.ninerouter.state.collectAsState()
+    var nrAutostarted by remember { mutableStateOf(false) }
+    LaunchedEffect(nrSt) {
+        // NotInstalled is its own state, so Stopped here means it is installed but not running.
+        if (!nrAutostarted && nrSt is com.celoext.runtime.NineRouterState.Stopped && Graph.prefs.ninerouterAuto) {
+            nrAutostarted = true
+            Graph.ninerouter.startServer()
+        }
+    }
     LaunchedEffect(rt is RuntimeState.Running) {
         if (rt is RuntimeState.Running) { Graph.catalog.refresh(); Graph.chats.refreshSessions() }
     }
@@ -211,6 +219,7 @@ private fun Shell(rt: RuntimeState) {
                         Route.Skills -> SkillsScreen(nav)
                         is Route.SkillEdit -> com.celoext.ui.screens.SkillEditScreen(r.name, nav)
                         Route.Server -> ServerScreen(nav)
+                        Route.NineRouter -> NineRouterScreen(nav)
                         Route.ConfigEditor -> ConfigEditorScreen(nav)
                         Route.About -> AboutScreen(nav)
                         Route.Capabilities -> CapabilitiesScreen(nav)

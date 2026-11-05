@@ -46,5 +46,8 @@ class MainActivity : ComponentActivity() {
         // Android may have killed the server in the background: start it again unless it was stopped by hand.
         val s = Graph.runtime.state.value
         if (Graph.prefs.autoStartServer && !Graph.runtime.userStopped && (s is com.celoext.runtime.RuntimeState.Crashed || s is com.celoext.runtime.RuntimeState.Stopped)) Graph.runtime.startServer()
+        // Same for the 9Router gateway, when the user lets it run with the app.
+        val ns = Graph.ninerouter.state.value
+        if (Graph.prefs.ninerouterAuto && !Graph.ninerouter.userStopped && (ns is com.celoext.runtime.NineRouterState.Crashed || ns is com.celoext.runtime.NineRouterState.Stopped)) Graph.ninerouter.startServer()
     }
 }

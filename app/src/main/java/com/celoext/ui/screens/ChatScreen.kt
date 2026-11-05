@@ -22,10 +22,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
@@ -59,7 +57,6 @@ import com.celoext.ui.components.ImageViewer
 import com.celoext.ui.components.OcDialog
 import com.celoext.ui.components.OcSheet
 import com.celoext.ui.components.OcTextField
-import com.celoext.ui.components.PulsingLogo
 import com.celoext.ui.components.Spinner
 import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
@@ -210,7 +207,7 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Spinner(32.dp) }
             } else {
                 androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalTextToolbar provides selBar) {
-                LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 12.dp)) {
+                LazyColumn(Modifier.fillMaxSize(), state = listState, verticalArrangement = Arrangement.spacedBy(18.dp), contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp)) {
                     // one reply's steps arrive as separate messages: merge them into one turn, like Claude Code
                     val turns = ArrayList<List<ChatMessage>>().apply {
                         chat.messages.forEach { m ->
@@ -235,7 +232,20 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
                     item(key = "tail") {
                         // "Thinking…" fades in and out: without it the chat tail jumped in height
                         Column(Modifier.fillMaxWidth().animateContentSize(tween(140)).padding(horizontal = 20.dp)) {
-                            chat.loadError?.let { Txt(it, size = 14.sp, color = c.danger) }
+                            chat.loadError?.let { msg ->
+                                Column(
+                                    Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(Oc.round(16.dp))
+                                        .background(c.surface).border(1.dp, c.danger.copy(alpha = 0.35f), Oc.round(16.dp)).padding(14.dp),
+                                ) {
+                                    Txt("Couldn't load this chat", size = 15.sp, color = c.danger, weight = FontWeight.Medium)
+                                    Txt(msg, size = 14.sp, color = c.textDim, modifier = Modifier.padding(top = 4.dp), lineHeight = 20.sp)
+                                    com.celoext.ui.components.SmallButton(
+                                        "Try again",
+                                        { scope.launch { chat.loading = true; chat.load(); chat.loading = false } },
+                                        Modifier.padding(top = 10.dp), filled = true,
+                                    )
+                                }
+                            }
                             if (busy) com.celoext.ui.components.ThinkingIndicator(
                                 if (statuses[id] == "retry") com.celoext.ui.components.Work.Wait else workKind(chat.messages.lastOrNull()),
                                 Modifier.padding(vertical = 4.dp),
@@ -281,25 +291,35 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
             }) { _ ->
                 if (myQuestion != null) QuestionPanel(myQuestion, chat.directory) else if (myPerm != null) PermissionPanel(myPerm, chat.directory)
             }
-        } else Box(Modifier.navigationBarsPadding()) {
-            ComposerHost(
-                state = state, nav = nav, busy = busy || sendingNow, sessionId = id,
-                placeholder = if (sendingNow) "Sending…" else if (editing != null) "Edit your message" else "Reply to ${if (com.celoext.data.Persona.on) "CeloAgents" else "OpenCode"}…",
-                dashed = incognito,
-                onSend = {
-                    val text = state.text.trim()
-                    val atts = state.attachments.toList()
-                    val e = editing
-                    state.clear(); stick = true; editing = null; sendingNow = true
-                    scope.launch {
-                        runCatching { if (e != null) hub.edit(ctx, id, e, text, atts) else hub.send(ctx, id, text, atts) }
-                            .onFailure { hub.toasts.tryEmit(it.message ?: "Send failed") }
-                        sendingNow = false
-                    }
-                },
-                onStop = { scope.launch { runCatching { Graph.api.abort(id, chat.directory) } } },
-                onVoice = if (incognito) null else ({ voice = true }),
-            )
+        } else {
+            // Scrolling back through the conversation: the composer slides away so the answer gets the whole
+            // screen, and slides back in when you reach the newest message (or start typing).
+            androidx.compose.animation.AnimatedVisibility(
+                visible = stick || state.canSend || editing != null,
+                enter = androidx.compose.animation.slideInVertically(tween(180)) { it } + androidx.compose.animation.fadeIn(tween(120)),
+                exit = androidx.compose.animation.slideOutVertically(tween(180)) { it } + androidx.compose.animation.fadeOut(tween(90)),
+            ) {
+                Box(Modifier.navigationBarsPadding()) {
+                    ComposerHost(
+                        state = state, nav = nav, busy = busy || sendingNow, sessionId = id,
+                        placeholder = if (sendingNow) "Sending…" else if (editing != null) "Edit your message" else "Reply to ${if (com.celoext.data.Persona.on) "CeloAgents" else "OpenCode"}…",
+                        dashed = incognito,
+                        onSend = {
+                            val text = state.text.trim()
+                            val atts = state.attachments.toList()
+                            val e = editing
+                            state.clear(); stick = true; editing = null; sendingNow = true
+                            scope.launch {
+                                runCatching { if (e != null) hub.edit(ctx, id, e, text, atts) else hub.send(ctx, id, text, atts) }
+                                    .onFailure { hub.toasts.tryEmit(it.message ?: "Send failed") }
+                                sendingNow = false
+                            }
+                        },
+                        onStop = { scope.launch { runCatching { Graph.api.abort(id, chat.directory) } } },
+                        onVoice = if (incognito) null else ({ voice = true }),
+                    )
+                }
+            }
         }
     }
 

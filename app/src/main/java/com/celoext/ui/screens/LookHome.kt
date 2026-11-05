@@ -1,12 +1,5 @@
 package com.celoext.ui.screens
 
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,9 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -53,9 +43,9 @@ import java.util.Locale
 /** Looks that have their own empty screen instead of the OpenCode label. */
 val lookHomes = setOf("hairline", "notebook", "messenger", "cards", "chatgpt")
 
-private class Idea(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val sub: String, val prompt: String)
+internal class Idea(val icon: androidx.compose.ui.graphics.vector.ImageVector, val title: String, val sub: String, val prompt: String)
 
-private fun ideas(code: Boolean) = if (code) listOf(
+internal fun ideas(code: Boolean) = if (code) listOf(
     Idea(Ic.Search, "Explain", "this project", "Look around this project and explain how it is put together."),
     Idea(Ic.Wrench, "Fix", "a failing build", "Run the build, find what fails and fix it."),
     Idea(Ic.ListCheck, "Plan", "a new feature", "Help me plan a new feature for this project: "),

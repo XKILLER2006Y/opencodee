@@ -28,6 +28,7 @@ sealed interface Route {
     /** "" is a new skill, "builtin:name" a built-in one. */
     data class SkillEdit(val name: String) : Route
     data object Server : Route
+    data object NineRouter : Route
     data object ConfigEditor : Route
     data object About : Route
     data object Capabilities : Route
@@ -92,6 +93,7 @@ object NavMemory {
         Route.Agents,
         Route.Skills,
         Route.Server,
+        Route.NineRouter,
         Route.ConfigEditor,
         Route.About,
         Route.Capabilities,

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -23,7 +22,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,7 +57,6 @@ import com.celoext.ui.components.Ico
 import com.celoext.ui.components.IconBtn
 import com.celoext.ui.components.ImageThumb
 import com.celoext.ui.components.Markdown
-import com.celoext.ui.components.OcTextField
 import com.celoext.ui.components.SmallButton
 import com.celoext.ui.components.longPress
 import com.celoext.ui.components.Spinner
@@ -517,29 +514,6 @@ fun DiffView(diff: String) {
 }
 
 // ---------- requests to the user ----------
-
-@Composable
-fun PermissionCard(r: PermissionReq, directory: String?) {
-    val c = Oc.c
-    val scope = rememberCoroutineScope()
-    fun reply(kind: String) {
-        Graph.chats.permissions.value = Graph.chats.permissions.value.filterNot { it.id == r.id }
-        scope.launch { runCatching { Graph.api.replyPermission(r.id, directory, kind, r.sessionID) } }
-    }
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(Oc.round(24.dp)).background(c.surface).border(1.dp, c.border, Oc.round(24.dp)).padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Ico(Ic.Shield, tint = c.warn, size = 22.dp); Spacer(Modifier.width(10.dp))
-            Txt("Permission needed", size = 17.sp, weight = FontWeight.Medium)
-        }
-        Txt(r.permission, size = 15.sp, color = c.textDim, modifier = Modifier.padding(top = 8.dp))
-        r.patterns.take(3).forEach { Txt(it, size = 14.sp, family = Oc.mono, maxLines = 2, modifier = Modifier.padding(top = 4.dp)) }
-        Row(Modifier.padding(top = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            SmallButton("Deny", { reply("reject") }, danger = true)
-            SmallButton("Allow once", { reply("once") }, filled = true)
-            SmallButton("Always", { reply("always") })
-        }
-    }
-}
 
 /**
  * The agent's question, like in Claude: a panel in place of the input, numbered options, "Something else" and "Skip".

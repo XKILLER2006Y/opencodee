@@ -84,7 +84,6 @@ class Prefs(ctx: Context) {
     var interruptedIds by str("interrupted_ids", "")     // tasks cut off by a server stop
     var updateCheckedAt by lng("update_checked_at", 0L)
     var updateSkipped by str("update_skipped", "")       // tag of the version the user asked to skip
-    var appIcon by str("app_icon", "look_cloud")
     var uiScale by str("ui_scale", "100")             // 90 | 100 | 110 | 120
     var incognitoIds by str("incognito_ids", "")
     var devicesJson by str("devices", "[]")
@@ -146,6 +145,28 @@ class Prefs(ctx: Context) {
             }
             return p
         }
+
+    // 9Router (local AI gateway in the same environment as opencode)
+    var ninerouterPort by str("ninerouter_port", "20128")
+    var ninerouterAuto by bool("ninerouter_auto", false)      // start with the app, next to the opencode server
+    var ninerouterVersion by str("ninerouter_version", "")
+    /** Dashboard login password; generated once so it survives restarts and reinstallations. */
+    val ninerouterPassword: String
+        get() = secretOnce("ninerouter_password", 20)
+    /** JWT signing secret for the dashboard cookie; stable so sessions survive restarts. */
+    val ninerouterJwt: String
+        get() = secretOnce("ninerouter_jwt", 48)
+
+    private fun secretOnce(key: String, len: Int): String {
+        var v = sp.getString(key, null)
+        if (v.isNullOrBlank()) {
+            val chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+            val r = SecureRandom()
+            v = (1..len).map { chars[r.nextInt(chars.length)] }.joinToString("")
+            sp.edit().putString(key, v).apply()
+        }
+        return v
+    }
 
     fun pinnedSet(): Set<String> = pinned.split(',').filter { it.isNotBlank() }.toSet()
     fun togglePin(id: String) {

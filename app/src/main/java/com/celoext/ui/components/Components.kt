@@ -1,10 +1,6 @@
 package com.celoext.ui.components
 
-import com.celoext.ui.theme.kimiLike
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -21,19 +17,16 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,7 +38,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -55,8 +47,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -241,11 +231,6 @@ fun SettingsRow(
 }
 
 
-@Composable
-fun Card(modifier: Modifier = Modifier, shape: Shape = Oc.round(16.dp), content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.clip(shape).background(Oc.c.surface), content = content)
-}
-
 /** The mark: an alpha mask tinted with [color] (the accent by default). */
 @Composable
 fun Logo(size: Dp = 56.dp, color: Color = Oc.c.accent) {
@@ -264,18 +249,6 @@ fun Spinner(size: Dp = 22.dp, color: Color = Oc.c.accent, stroke: Dp = 2.5.dp) {
         val w = stroke.toPx()
         drawArc(color, 0f, 270f, false, topLeft = Offset(w / 2, w / 2), size = Size(this.size.width - w, this.size.height - w), style = Stroke(w, cap = StrokeCap.Round))
     }
-}
-
-/** Work indicator: the mark, softly pulsing. */
-@Composable
-fun PulsingLogo(size: Dp = 22.dp, color: Color = Oc.c.accent) {
-    val t = rememberInfiniteTransition(label = "pulse")
-    val blink by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "blink")
-    androidx.compose.foundation.Image(
-        painter = androidx.compose.ui.res.painterResource(com.celoext.R.drawable.logo_mark),
-        contentDescription = null, modifier = Modifier.size(size).alpha(blink),
-        contentScale = androidx.compose.ui.layout.ContentScale.Fit, colorFilter = ColorFilter.tint(color),
-    )
 }
 
 @Composable

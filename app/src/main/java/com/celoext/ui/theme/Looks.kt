@@ -41,8 +41,6 @@ private fun v(res: Int, w: Int) = Font(res, FontWeight(w), variationSettings = F
 
 /** Unbounded: a wide grotesque for Hairline headings (OFL). */
 val UnboundedFamily = FontFamily(v(R.font.unbounded, 400), v(R.font.unbounded, 500), v(R.font.unbounded, 600), v(R.font.unbounded, 700))
-/** JetBrains Mono: Hairline's mono labels (OFL). */
-val JetBrainsMono = FontFamily(v(R.font.jetbrains_mono, 400), v(R.font.jetbrains_mono, 500), v(R.font.jetbrains_mono, 600), v(R.font.jetbrains_mono, 700))
 
 private fun pal(
     dark: Boolean, bg: Long, surface: Long, high: Long, text: Long, dim: Long, border: Long, accent: Long, link: Long,

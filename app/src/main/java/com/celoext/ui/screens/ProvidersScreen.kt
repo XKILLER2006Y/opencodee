@@ -3,7 +3,6 @@ package com.celoext.ui.screens
 import com.celoext.ui.theme.screenBackdrop
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -63,15 +61,18 @@ fun ProvidersScreen(nav: Nav) {
     var connect by remember { mutableStateOf<AllProvider?>(null) }
     var disconnect by remember { mutableStateOf<String?>(null) }
     var kamihub by remember { mutableStateOf(false) }
+    var ninerouter by remember { mutableStateOf(false) }
 
     suspend fun load() { all = runCatching { Graph.api.allProviders().all }.getOrDefault(emptyList()); loading = false }
     LaunchedEffect(Unit) { load() }
 
     val connectedIds = connected.map { it.id }.toSet()
     val kami = com.celoext.data.CustomProviders.KAMIHUB
+    val nr = com.celoext.data.CustomProviders.NINEROUTER(Graph.ninerouter.port)
     val showKamihub = kami.id !in connectedIds && (query.isBlank() || kami.name.contains(query, true) || kami.id.contains(query, true))
-    // Kamihub has its own row (it needs a key and registers its models), so it is not listed twice
-    val available = all.filter { it.id !in connectedIds && it.id != kami.id && (query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true)) }
+    val showNineRouter = nr.id !in connectedIds && (query.isBlank() || nr.name.contains(query, true) || nr.id.contains(query, true))
+    // Kamihub and 9Router have their own rows (they need a key and register their models), so they are not listed twice
+    val available = all.filter { it.id !in connectedIds && it.id != kami.id && it.id != nr.id && (query.isBlank() || it.name.contains(query, true) || it.id.contains(query, true)) }
         .sortedWith(compareBy({ popular.indexOf(it.id).let { i -> if (i < 0) 999 else i } }, { it.name.lowercase() }))
 
     Column(Modifier.fillMaxSize().screenBackdrop("ProvidersScreen1")) {
@@ -105,6 +106,7 @@ fun ProvidersScreen(nav: Nav) {
             item {
                 SettingsGroup {
                     if (showKamihub) SettingsRow(kami.name, subtitle = "kamihub.us.ci · OpenAI-compatible", icon = Ic.Plus, chevron = true, onClick = { kamihub = true })
+                    if (showNineRouter) SettingsRow(nr.name, subtitle = "localhost:${Graph.ninerouter.port} · this phone", icon = Ic.Router, chevron = true, onClick = { ninerouter = true })
                     available.take(60).forEach { p ->
                         SettingsRow(p.name.ifBlank { p.id }, subtitle = p.id, icon = Ic.Plus, chevron = true, onClick = { connect = p })
                     }
@@ -117,6 +119,7 @@ fun ProvidersScreen(nav: Nav) {
         ConnectSheet(p, onDone = { connect = null; scope.launch { load() } })
     }
     if (kamihub) KamihubSheet(onDone = { kamihub = false; scope.launch { load() } })
+    if (ninerouter) NineRouterSheet(nav, onDone = { ninerouter = false; scope.launch { load() } })
     disconnect?.let { id ->
         OcDialog("Disconnect $id?", { disconnect = null }, "Disconnect", {
             disconnect = null
@@ -144,7 +147,7 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
     var code by remember { mutableStateOf("") }
 
     LaunchedEffect(p.id) {
-        methods = runCatching { Graph.api.providerAuthMethods()[p.id] }.getOrNull().orEmpty().ifEmpty { listOf(AuthMethod("api", "API key")) }
+        methods = runCatching { Graph.api.providerAuthMethods()[p.id] }.getOrNull().orEmpty().ifEmpty { listOf(AuthMethod("key", "API key")) }
     }
 
     fun finish() { scope.launch { runCatching { Graph.api.disposeAll() }; Graph.catalog.refresh(); Graph.chats.toasts.tryEmit("${p.name} connected"); onDone() } }
@@ -153,7 +156,7 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (methods == null) Box(Modifier.fillMaxWidth().padding(24.dp)) { Spinner(26.dp) }
             methods?.forEachIndexed { i, m ->
-                if (m.type == "api") {
+                if (m.type == "key" || m.type == "api") {
                     Txt(m.label.ifBlank { "API key" }, size = 16.sp, color = c.textDim)
                     OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
                     if (p.id == "opencode-go" || p.id == "opencode") {
@@ -212,18 +215,90 @@ private fun KamihubSheet(onDone: () -> Unit) {
 
     OcSheet(onDone, p.name, skipHalf = false) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The model list is fetched with your key.", size = 14.sp, color = c.textDim)
+            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The key is checked with a test message, then the model list is fetched.", size = 14.sp, color = c.textDim)
             Txt("API key", size = 16.sp, color = c.textDim)
             OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
-            Pill(if (busy) "Connecting…" else "Connect", {
+            Pill(if (busy) "Testing the key…" else "Connect", {
                 busy = true; error = null
                 scope.launch {
                     runCatching { com.celoext.data.CustomProviders.connect(p, key) }
-                        .onSuccess { n -> Graph.chats.toasts.tryEmit("${p.name} connected ($n models)"); onDone() }
+                        .onSuccess { r ->
+                            Graph.chats.toasts.tryEmit(
+                                if (r.warning == null) "${p.name} connected · ${r.model.substringAfterLast('/')}"
+                                else "${p.name} added, but ${r.warning}",
+                            )
+                            onDone()
+                        }
                         .onFailure { error = it.message ?: "Could not connect" }
                     busy = false
                 }
             }, enabled = key.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth())
+            error?.let { Txt(it, size = 15.sp, color = c.danger) }
+        }
+    }
+}
+
+@Composable
+private fun NineRouterSheet(nav: Nav, onDone: () -> Unit) {
+    val c = Oc.c
+    val scope = rememberCoroutineScope()
+    val nr = Graph.ninerouter
+    val st by nr.state.collectAsState()
+    val p = com.celoext.data.CustomProviders.NINEROUTER(nr.port)
+    var key by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    OcSheet(onDone, p.name, skipHalf = false) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Txt(
+                "Local gateway at ${p.baseUrl}. Get an API key from its dashboard (Endpoint → API keys); the key is checked with a test message, then the model list is fetched.",
+                size = 14.sp, color = c.textDim, lineHeight = 20.sp,
+            )
+            when {
+                st is com.celoext.runtime.NineRouterState.Running -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    SmallButton("Open dashboard", { nav.push(com.celoext.ui.Route.Preview(nr.dashboardUrl, null)) }, filled = true)
+                }
+                st is com.celoext.runtime.NineRouterState.Installing -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt((st as com.celoext.runtime.NineRouterState.Installing).step + "…", size = 15.sp, color = c.warn)
+                }
+                st is com.celoext.runtime.NineRouterState.Starting -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt("Starting 9Router…", size = 15.sp, color = c.warn)
+                }
+                !nr.installed() -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt("The 9Router server isn't installed yet.", size = 15.sp, color = c.warn)
+                    SmallButton("Install", {
+                        scope.launch {
+                            val ok = nr.install()
+                            if (ok) nr.startServer()
+                        }
+                    }, filled = true)
+                }
+                else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt(
+                        (st as? com.celoext.runtime.NineRouterState.Crashed)?.message ?: "The 9Router server is not running.",
+                        size = 15.sp, color = c.warn,
+                    )
+                    SmallButton("Start", { nr.startServer() }, filled = true)
+                }
+            }
+            Txt("API key", size = 16.sp, color = c.textDim)
+            OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
+            Pill(if (busy) "Testing the key…" else "Connect", {
+                busy = true; error = null
+                scope.launch {
+                    runCatching { com.celoext.data.CustomProviders.connect(p, key) }
+                        .onSuccess { r ->
+                            Graph.chats.toasts.tryEmit(
+                                if (r.warning == null) "${p.name} connected · ${r.model.substringAfterLast('/')}"
+                                else "${p.name} added, but ${r.warning}",
+                            )
+                            onDone()
+                        }
+                        .onFailure { error = it.message ?: "Could not connect" }
+                    busy = false
+                }
+            }, enabled = key.isNotBlank() && !busy && st is com.celoext.runtime.NineRouterState.Running, modifier = Modifier.fillMaxWidth())
             error?.let { Txt(it, size = 15.sp, color = c.danger) }
         }
     }

@@ -13,7 +13,6 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
@@ -37,6 +36,12 @@ class ApiException(val code: Int, message: String) : IOException(message)
 
 /** REST API client for OpenCode 2.2.5 with v1 compatibility translation layer. */
 class OpenCodeApi(private val prefs: Prefs) {
+    companion object {
+        /** The server rejects any `limit` above 200 ("Expected a value less than or equal to 200"), so never send more. */
+        const val MAX_LIMIT = 200
+        fun pageLimit(n: Int) = n.coerceIn(1, MAX_LIMIT)
+    }
+
     val baseUrl get() = Graph.devices.active()?.url ?: "http://127.0.0.1:${prefs.serverPort}"
     private val password get() = Graph.devices.active()?.password ?: prefs.serverPassword
     private val jsonType = "application/json".toMediaType()
@@ -113,10 +118,18 @@ class OpenCodeApi(private val prefs: Prefs) {
 
     private val healthHttp by lazy { http.newBuilder().callTimeout(2, TimeUnit.SECONDS).build() }
 
-    suspend fun healthVersionOrThrow(): String? = healthHttp.newCall(request("/api/info").build()).await().use { r ->
-        val text = withContext(Dispatchers.IO) { r.body.string() }
-        if (!r.isSuccessful) throw ApiException(r.code, "health ${r.code}")
-        (runCatching { OcJson.parseToJsonElement(text) as? JsonObject }.getOrNull())?.str("version")
+    suspend fun healthVersionOrThrow(): String? {
+        var last: Exception? = null
+        for (path in listOf("/api/info", "/api/health", "/global/health")) {
+            try {
+                return healthHttp.newCall(request(path).build()).await().use { r ->
+                    val text = withContext(Dispatchers.IO) { r.body.string() }
+                    if (!r.isSuccessful) throw ApiException(r.code, "health $path ${r.code}")
+                    (runCatching { OcJson.parseToJsonElement(text) as? JsonObject }.getOrNull())?.str("version") ?: "2.x"
+                }
+            } catch (e: Exception) { last = e }
+        }
+        throw last ?: ApiException(-1, "health failed")
     }
 
     suspend fun reachable(url: String, password: String): String? = try {
@@ -129,10 +142,6 @@ class OpenCodeApi(private val prefs: Prefs) {
             }
         }
     } catch (_: Exception) { "Not reachable — is it on, on the same network, and is `opencode serve` running?" }
-
-    suspend fun healthVersion(): String? = try {
-        (call("GET", "/api/info") as? JsonObject)?.str("version")
-    } catch (_: Exception) { null }
 
     suspend fun probe(url: String, password: String): String {
         val req = Request.Builder().url(url.trimEnd('/') + "/api/info").header("Authorization", Credentials.basic("opencode", password)).build()
@@ -148,8 +157,8 @@ class OpenCodeApi(private val prefs: Prefs) {
 
     // ---------- sessions ----------
 
-    suspend fun listSessions(directory: String? = null, limit: Int = 300, search: String? = null): List<Session> {
-        val q = dir(directory) + mapOf("limit" to limit.toString(), "search" to search)
+    suspend fun listSessions(directory: String? = null, limit: Int = MAX_LIMIT, search: String? = null): List<Session> {
+        val q = dir(directory) + mapOf("limit" to pageLimit(limit).toString(), "search" to search)
         val res = call("GET", "/api/session", q)
         val arr = (res as? JsonObject)?.arr("data") ?: res as? JsonArray ?: JsonArray(emptyList())
         return arr.mapNotNull { (it as? JsonObject)?.let(::parseSession) }
@@ -162,12 +171,6 @@ class OpenCodeApi(private val prefs: Prefs) {
             permission?.let { put("permissions", it) }
         }
         val res = call("POST", "/api/session", body = body)!!
-        val data = (res as? JsonObject)?.obj("data") ?: res as JsonObject
-        return parseSession(data)
-    }
-
-    suspend fun getSession(id: String, directory: String?): Session {
-        val res = call("GET", "/api/session/$id", loc(directory))!!
         val data = (res as? JsonObject)?.obj("data") ?: res as JsonObject
         return parseSession(data)
     }
@@ -216,10 +219,6 @@ class OpenCodeApi(private val prefs: Prefs) {
         call("POST", "/api/session/$id/revert/commit", loc(directory))
     }
 
-    suspend fun unrevert(id: String, directory: String?) {
-        call("DELETE", "/api/session/$id/revert", loc(directory))
-    }
-
     suspend fun statuses(directory: String?): Map<String, JsonObject> {
         val res = call("GET", "/api/session/active", loc(directory)) as? JsonObject ?: return emptyMap()
         val data = res.obj("data") ?: res
@@ -228,8 +227,8 @@ class OpenCodeApi(private val prefs: Prefs) {
         }.toMap()
     }
 
-    suspend fun messages(id: String, directory: String?, limit: Int = 300): List<MessageWithParts> {
-        val res = call("GET", "/api/session/$id/message", loc(directory) + mapOf("limit" to limit.toString()))
+    suspend fun messages(id: String, directory: String?, limit: Int = MAX_LIMIT): List<MessageWithParts> {
+        val res = call("GET", "/api/session/$id/message", loc(directory) + mapOf("limit" to pageLimit(limit).toString()))
             ?: JsonArray(emptyList())
         return parseMessages(res, defaultSessionID = id)
     }
@@ -427,7 +426,7 @@ class OpenCodeApi(private val prefs: Prefs) {
             val methods = iObj.arr("methods")?.mapNotNull { mEl ->
                 val mObj = mEl as? JsonObject ?: return@mapNotNull null
                 AuthMethod(
-                    type = mObj.str("type") ?: "api",
+                    type = mObj.str("type") ?: "key",
                     label = mObj.str("label") ?: mObj.str("type") ?: "API key",
                 )
             }.orEmpty()
@@ -648,13 +647,6 @@ class OpenCodeApi(private val prefs: Prefs) {
     suspend fun projects(): JsonArray {
         val res = call("GET", "/api/project")
         return res as? JsonArray ?: (res as? JsonObject)?.arr("data") ?: JsonArray(emptyList())
-    }
-
-    suspend fun findFiles(query: String, directory: String?): List<String> {
-        val q = loc(directory) + mapOf("query" to query, "limit" to "20")
-        val res = call("GET", "/api/fs/find", q)
-        val arr = (res as? JsonObject)?.arr("data") ?: res as? JsonArray ?: JsonArray(emptyList())
-        return arr.mapNotNull { (it as? JsonObject)?.str("path") }
     }
 
     private fun JsonArray?.orEmpty() = this ?: JsonArray(emptyList())

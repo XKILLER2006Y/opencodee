@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
@@ -46,10 +45,8 @@ import com.celoext.Graph
 import com.celoext.ui.Nav
 import com.celoext.ui.Route
 import com.celoext.ui.components.ComposerHost
-import com.celoext.ui.components.Heading
 import com.celoext.ui.components.Ico
 import com.celoext.ui.components.IconBtn
-import com.celoext.ui.components.Logo
 import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
 import com.celoext.ui.components.rememberComposerState
@@ -57,7 +54,6 @@ import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
 import com.celoext.ui.theme.lookBackdrop
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 @Composable
 fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
@@ -149,9 +145,7 @@ fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
                                 // desktop: a dim label without captions, project chips under the input
                                 com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.32f })
                             } else {
-                                com.celoext.ui.components.LiveCat(typing = state.text.isNotEmpty())
-                                Spacer(Modifier.height(20.dp))
-                                ModeLine(code)
+                                DefaultHome(nav, code) { state.text = it }
                             }
                         }
                     }
@@ -226,24 +220,6 @@ fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
     }
     }
     if (picker) ProjectPicker({ picker = false })
-}
-
-/** "Build · Model  Provider", like the mode line in terminal OpenCode. */
-@Composable
-private fun ModeLine(code: Boolean) {
-    val c = Oc.c
-    val prefs = Graph.prefs
-    val providers by Graph.catalog.providers.collectAsState()
-    val provider = providers.firstOrNull { it.id == prefs.providerId }
-    val model = provider?.models?.get(prefs.modelId)
-    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Txt(if (code) prefs.agent.replaceFirstChar { it.uppercase() } else "Chat", size = 15.sp, color = c.link, family = Oc.mono)
-            Txt("  ·  ", size = 15.sp, color = c.textDim, family = Oc.mono)
-            Txt(model?.name?.ifBlank { null } ?: if (providers.isEmpty()) "…" else prefs.modelId.ifBlank { "no model" }, size = 15.sp, family = Oc.mono, maxLines = 1)
-        }
-        provider?.let { Txt(it.name, Modifier.padding(top = 4.dp), size = 13.sp, color = c.textDim, family = Oc.mono, maxLines = 1) }
-    }
 }
 
 /** The line under the input in the desktop look: project and Git (or memory for a regular chat). */
