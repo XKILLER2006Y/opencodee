@@ -62,11 +62,11 @@ class RuntimeController(
 
             if (!paths.rootfsReady) {
                 val tgz = File(paths.downloads, "ubuntu-base.tar.gz")
-                step("Downloading Ubuntu", 0f)
-                Downloader.fetch(ROOTFS_URL, tgz, ROOTFS_SHA) { d, t -> step("Downloading Ubuntu", frac(d, t), mb(d, t)) }
-                step("Unpacking Ubuntu", 0f)
+                step("Downloading environment", 0f)
+                Downloader.fetch(ROOTFS_URL, tgz, ROOTFS_SHA) { d, t -> step("Downloading environment", frac(d, t), mb(d, t)) }
+                step("Unpacking environment", 0f)
                 paths.rootfs.deleteRecursively()
-                val r = TarExtractor.extract(tgz, paths.rootfs) { d, t -> step("Unpacking Ubuntu", frac(d, t)) }
+                val r = TarExtractor.extract(tgz, paths.rootfs) { d, t -> step("Unpacking environment", frac(d, t)) }
                 logLine("rootfs: ${r.files} files, skipped ${r.skipped}")
                 configureRootfs()
                 prefs.seededSkills = "" // fresh Ubuntu: the default skills have to be copied in again
@@ -138,13 +138,13 @@ class RuntimeController(
         }
         var (code, out) = once()
         if (code != 0 || !Regex("\\d+\\.\\d+\\.\\d+").containsMatchIn(out)) {
-            logLine("First launch failed (code $code), retrying with PROOT_NO_SECCOMP=1")
+            logLine("First launch failed (code $code), retrying in compatibility mode")
             prefs.noSeccomp = true
             val second = once()
             code = second.first; out = second.second
             if (code != 0 || !Regex("\\d+\\.\\d+\\.\\d+").containsMatchIn(out)) {
                 prefs.noSeccomp = false
-                error("opencode does not start in proot (code $code): ${out.trim().takeLast(400)}")
+                error("opencode does not start (code $code): ${out.trim().takeLast(400)}")
             }
         }
         logLine("opencode: ${out.trim()}")
@@ -195,7 +195,7 @@ class RuntimeController(
                 ),
             )
             val p = try { pb.start() } catch (e: Exception) {
-                state.value = RuntimeState.Crashed("Could not start proot: ${e.message}")
+                state.value = RuntimeState.Crashed("Could not start the server: ${e.message}")
                 return@withContext
             }
             process = p

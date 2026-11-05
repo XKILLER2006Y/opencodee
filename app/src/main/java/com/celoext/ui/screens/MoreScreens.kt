@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -162,7 +164,7 @@ fun ServerScreen(nav: Nav) {
                     else -> "Stopped" to c.textDim
                 }
                 Txt(label, size = 19.sp, color = color)
-                Txt("Ubuntu 24.04 (proot) · 127.0.0.1:${prefs.serverPort}", size = 15.sp, color = c.textDim, modifier = Modifier.padding(top = 4.dp))
+                Txt("Local server · 127.0.0.1:${prefs.serverPort}", size = 15.sp, color = c.textDim, modifier = Modifier.padding(top = 4.dp))
                 Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (rt is RuntimeState.Running || rt is RuntimeState.Starting) SmallButton("Stop", { Graph.runtime.stopServer() }, danger = true)
                     else SmallButton("Start", { Graph.runtime.startServer() }, filled = true)
@@ -174,7 +176,7 @@ fun ServerScreen(nav: Nav) {
             SettingsGroup {
                 SettingsRow("Start with the app", icon = Ic.Zap, trailing = { OcSwitch(prefs.autoStartServer) { prefs.autoStartServer = it } })
                 SettingsRow("Keep CPU awake while running", icon = Ic.Server, trailing = { OcSwitch(prefs.keepAwake) { prefs.keepAwake = it } })
-                SettingsRow("Run as root", subtitle = "Uses su (Magisk / KernelSU) so Ubuntu can read the Termux home and other protected paths", icon = Ic.Shield, trailing = {
+                SettingsRow("Run as root", subtitle = "Uses su (Magisk / KernelSU) so the environment can read the Termux home and other protected paths", icon = Ic.Shield, trailing = {
                     OcSwitch(prefs.rootMode) { on ->
                         scope.launch {
                             val ok = Graph.runtime.setRootMode(on)
@@ -183,7 +185,7 @@ fun ServerScreen(nav: Nav) {
                         }
                     }
                 })
-                SettingsRow("Compatibility mode", subtitle = "PROOT_NO_SECCOMP — try if crashes happen on your phone", icon = Ic.Shield, trailing = { OcSwitch(prefs.noSeccomp) { prefs.noSeccomp = it } })
+                SettingsRow("Compatibility mode", subtitle = "Try this if the server keeps crashing on your phone", icon = Ic.Shield, trailing = { OcSwitch(prefs.noSeccomp) { prefs.noSeccomp = it } })
                 // Android 12+ kills "extra" child processes of apps (phantom process killer), and proot has many
                 SettingsRow("Server keeps stopping?", subtitle = "Developer options → turn on “Disable child process restrictions”", icon = Ic.Info, onClick = {
                     runCatching { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
@@ -192,9 +194,9 @@ fun ServerScreen(nav: Nav) {
             }
             Spacer(Modifier.height(16.dp))
             SettingsGroup {
-                SettingsRow("Update OpenCode", subtitle = updating ?: "Installed: ${prefs.opencodeVersion.ifBlank { "?" }}", icon = Ic.Download, onClick = {
+                SettingsRow("Update OpenCode", subtitle = updating ?: "Check for a newer OpenCode", icon = Ic.Download, onClick = {
                     if (updating == null) { updating = "Checking…"; scope.launch {
-                        updating = runCatching { "Updated to " + Graph.runtime.updateOpencode() }.getOrElse { it.message }
+                        updating = runCatching { Graph.runtime.updateOpencode(); "Up to date" }.getOrElse { it.message }
                     } }
                 })
                 SettingsRow("Install dev tools", subtitle = "git, ripgrep, curl, python3, build-essential", icon = Ic.Terminal, onClick = {
@@ -207,7 +209,7 @@ fun ServerScreen(nav: Nav) {
                 SettingsRow("Don't kill the server in background", subtitle = "Exempt the app from battery optimization", icon = Ic.Zap, onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 })
-                SettingsRow("Reset environment", subtitle = "Deletes Ubuntu and everything inside it", icon = Ic.Trash, titleColor = c.danger, onClick = { reset = true })
+                SettingsRow("Reset environment", subtitle = "Deletes the environment and everything inside it", icon = Ic.Trash, titleColor = c.danger, onClick = { reset = true })
             }
             Txt(
                 "Android 12+ may kill background child processes. If the server dies when the screen is off, run once from a computer:\n" +
@@ -222,7 +224,7 @@ fun ServerScreen(nav: Nav) {
     tools?.let { lines -> LogSheet(lines, "Installing tools") { tools = null } }
     if (reset) OcDialog("Reset environment?", { reset = false }, "Reset", {
         reset = false; Graph.runtime.resetRuntime()
-    }, danger = true) { Txt("Ubuntu, OpenCode and all projects under /root will be deleted. Sessions history is lost too.", size = 16.sp, color = Oc.c.textDim) }
+    }, danger = true) { Txt("The environment, OpenCode and all projects under /root will be deleted. Sessions history is lost too.", size = 16.sp, color = Oc.c.textDim) }
 }
 
 @Composable
@@ -327,7 +329,6 @@ fun AboutScreen(nav: Nav) {
                 SettingsRow("OpenCode mobile", subtitle = "v${BuildConfig.VERSION_NAME}", icon = Ic.Info)
                 if (com.celoext.ui.theme.Oc.look.id == "cloud") SettingsRow("CeloAgents", subtitle = Graph.prefs.petCount.let { "Petted $it ${if (it == "1") "time" else "times"}" }, icon = Ic.Cloud, chevron = true, onClick = { nav.push(com.celoext.ui.Route.MascotSettings) })
                 SettingsRow("Source on GitHub", subtitle = com.celoext.data.Updater.REPO, icon = Ic.GitHub, onClick = { open("https://github.com/" + com.celoext.data.Updater.REPO) })
-                SettingsRow("OpenCode (in container)", subtitle = Graph.prefs.opencodeVersion.ifBlank { "not installed" }, icon = Ic.Terminal)
                 SettingsRow("OpenCode documentation", icon = Ic.External, onClick = { open("https://opencode.ai/docs") })
                 SettingsRow("OpenCode Go console", icon = Ic.External, onClick = { open("https://opencode.ai/console") })
             }
@@ -354,7 +355,11 @@ fun AboutScreen(nav: Nav) {
                     trailing = { OcSwitch(Graph.prefs.updateAuto) { Graph.prefs.updateAuto = it } })
             }
             Txt(
-                "Unofficial client. Bundles proot and libtalloc from the Termux packages (GPL-2.0 / LGPL-3.0) and downloads Ubuntu Base 24.04 and OpenCode (MIT) on first run.",
+                "Development By Mahiro | HiraTeam",
+                Modifier.fillMaxWidth().padding(top = 24.dp), size = 14.sp, color = c.textDim, weight = FontWeight.Medium, align = TextAlign.Center,
+            )
+            Txt(
+                "Unofficial client. Bundles open-source components from the Termux packages (GPL-2.0 / LGPL-3.0) and downloads a Linux base image and OpenCode (MIT) on first run.",
                 size = 13.sp, color = c.textDim, modifier = Modifier.padding(20.dp), lineHeight = 19.sp,
             )
         }

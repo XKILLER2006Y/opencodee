@@ -20,9 +20,13 @@ object Root {
 
     fun quote(s: String) = "'" + s.replace("'", "'\\''") + "'"
 
-    /** The shell line for `su -c`: loose umask (the app must still be able to use files created as root), clean env, exec. */
+    /**
+     * The shell line for `su -c`: loose umask (the app must still be able to use files created as root), exported env, exec.
+     * `export` instead of `env K=V cmd`: the app's install path contains "==", which `env` would take for an assignment.
+     */
     fun script(env: Map<String, String>, argv: List<String>): String =
-        "umask 000; exec env " + env.entries.joinToString(" ") { "${it.key}=${quote(it.value)}" } + " " + argv.joinToString(" ") { quote(it) }
+        "umask 000; " + env.entries.joinToString("") { "export ${it.key}=${quote(it.value)}; " } +
+            "exec " + argv.joinToString(" ") { quote(it) }
 
     @Volatile private var termux: Boolean? = null
     /** Whether the Termux home exists (checked as root; the app itself can't see it). */

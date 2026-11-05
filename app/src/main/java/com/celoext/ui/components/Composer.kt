@@ -239,13 +239,16 @@ fun ComposerHost(
             if (Oc.claudeLike) {
                 IconBtn(Ic.Plus, { haptic(); state.showAdd = true }, size = 40.dp, bg = c.surfaceHigh)
                 Spacer(Modifier.width(8.dp))
-                Row(
-                    Modifier.widthIn(max = 230.dp).height(40.dp).clip(Oc.pill).background(c.surfaceHigh)
-                        .tap(scale = 0.97f) { haptic(); state.showModel = true }.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Txt(modelName, size = 15.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
-                    if (prefs.variant.isNotBlank()) { Spacer(Modifier.width(6.dp)); Txt(prefs.variant.replaceFirstChar { it.uppercase() }, size = 15.sp, color = c.textDim, maxLines = 1) }
+                // the pill only gets what's left after plus, mic and send: a long model name is cut with "…" instead of squeezing the buttons
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    Row(
+                        Modifier.height(40.dp).clip(Oc.pill).background(c.surfaceHigh)
+                            .tap(scale = 0.97f) { haptic(); state.showModel = true }.padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Txt(modelName, size = 15.sp, maxLines = 1, modifier = Modifier.weight(1f, fill = false))
+                        if (prefs.variant.isNotBlank()) { Spacer(Modifier.width(6.dp)); Txt(prefs.variant.replaceFirstChar { it.uppercase() }, size = 15.sp, color = c.textDim, maxLines = 1) }
+                    }
                 }
             } else {
                 val providerName = providers.firstOrNull { it.id == prefs.providerId }?.name.orEmpty()
@@ -278,7 +281,6 @@ fun ComposerHost(
                     }
                 }
             }
-            if (Oc.claudeLike) Spacer(Modifier.weight(1f))
             // the mic is always at hand: add by voice to what's typed and send even while the agent works
             IconBtn(Ic.Mic, { haptic(); startDict() }, size = 40.dp, bg = c.surfaceHigh, tint = c.textDim)
             Spacer(Modifier.width(8.dp))

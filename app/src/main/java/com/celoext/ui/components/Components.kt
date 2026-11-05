@@ -246,18 +246,14 @@ fun Card(modifier: Modifier = Modifier, shape: Shape = Oc.round(16.dp), content:
     Column(modifier.clip(shape).background(Oc.c.surface), content = content)
 }
 
+/** The mark: an alpha mask tinted with [color] (the accent by default). */
 @Composable
 fun Logo(size: Dp = 56.dp, color: Color = Oc.c.accent) {
-    Canvas(Modifier.size(size)) {
-        val s = this.size.minDimension
-        val w = s * 0.095f
-        val st = Stroke(width = w, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round)
-        val p = androidx.compose.ui.graphics.Path().apply {
-            moveTo(s * .22f, s * .22f); lineTo(s * .58f, s * .5f); lineTo(s * .22f, s * .78f)
-        }
-        drawPath(p, color, style = st)
-        drawLine(color, Offset(s * .62f, s * .8f), Offset(s * .84f, s * .8f), strokeWidth = w, cap = StrokeCap.Round)
-    }
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(com.celoext.R.drawable.logo_mark),
+        contentDescription = null, modifier = Modifier.size(size),
+        contentScale = androidx.compose.ui.layout.ContentScale.Fit, colorFilter = ColorFilter.tint(color),
+    )
 }
 
 @Composable
@@ -270,18 +266,16 @@ fun Spinner(size: Dp = 22.dp, color: Color = Oc.c.accent, stroke: Dp = 2.5.dp) {
     }
 }
 
-/** Work indicator: ">" and a blinking cursor, like in a terminal. */
+/** Work indicator: the mark, softly pulsing. */
 @Composable
 fun PulsingLogo(size: Dp = 22.dp, color: Color = Oc.c.accent) {
-    val t = rememberInfiniteTransition(label = "cursor")
-    val blink by t.animateFloat(0.1f, 1f, infiniteRepeatable(tween(520), RepeatMode.Reverse), label = "blink")
-    Canvas(Modifier.size(size)) {
-        val s = this.size.minDimension
-        val w = s * 0.095f
-        val p = androidx.compose.ui.graphics.Path().apply { moveTo(s * .22f, s * .22f); lineTo(s * .58f, s * .5f); lineTo(s * .22f, s * .78f) }
-        drawPath(p, color, style = Stroke(w, cap = StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
-        drawLine(color.copy(alpha = blink), Offset(s * .62f, s * .8f), Offset(s * .84f, s * .8f), strokeWidth = w, cap = StrokeCap.Round)
-    }
+    val t = rememberInfiniteTransition(label = "pulse")
+    val blink by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "blink")
+    androidx.compose.foundation.Image(
+        painter = androidx.compose.ui.res.painterResource(com.celoext.R.drawable.logo_mark),
+        contentDescription = null, modifier = Modifier.size(size).alpha(blink),
+        contentScale = androidx.compose.ui.layout.ContentScale.Fit, colorFilter = ColorFilter.tint(color),
+    )
 }
 
 @Composable

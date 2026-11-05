@@ -47,7 +47,7 @@ fun SetupScreen(rt: RuntimeState) {
         Heading("OpenCode on this phone", size = 30.sp, align = TextAlign.Center)
         Spacer(Modifier.height(14.dp))
         Txt(
-            "The agent runs in a Linux container (Ubuntu via proot) right on your device — no computer needed. " +
+            "The agent runs in a Linux container right on your device — no computer needed. " +
                 "Setup downloads about 110 MB once.",
             size = 16.sp, color = c.textDim, align = TextAlign.Center, lineHeight = 23.sp,
         )

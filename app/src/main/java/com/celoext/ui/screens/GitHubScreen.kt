@@ -126,7 +126,7 @@ fun GitHubScreen(nav: Nav) {
                         Spacer(Modifier.height(26.dp))
                         Pill("Sign in with GitHub", { scope.launch { GitHub.signIn() } }, Modifier.fillMaxWidth(), icon = Ic.GitHub)
                         Spacer(Modifier.height(10.dp))
-                        Txt("Installs git and the GitHub CLI in Ubuntu, about 30 MB.", size = 13.sp, color = c.textDim)
+                        Txt("Installs git and the GitHub CLI in the environment, about 30 MB.", size = 13.sp, color = c.textDim)
                     }
                 }
             }
