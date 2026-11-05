@@ -70,7 +70,7 @@ This is a beta and there are bugs. Please report them in [Issues](../../issues).
 - `tools/connect-qr.sh` starts OpenCode on a computer and prints the QR code for the app.
 - `tools/promo/` has the scripts that render the promo video and banners.
 
-OpenCode is pinned to 1.19.4 (`RuntimeController.OC_VERSION`), the version the client is tested against.
+OpenCode is pinned to 2.2.5 (`RuntimeController.OC_VERSION`), the version the client targets.
 
 `targetSdk` is 28 on purpose: from 29 on, Android does not allow running binaries from the app's data directory, and proot needs that (Termux does the same). For the same reason the app is distributed as an APK and not through Google Play.
 

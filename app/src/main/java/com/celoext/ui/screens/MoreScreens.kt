@@ -151,7 +151,6 @@ fun ServerScreen(nav: Nav) {
     var showLog by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<List<String>?>(null) }
     var reset by remember { mutableStateOf(false) }
-    var updating by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().screenBackdrop("MoreScreens2")) {
         TopBar("Local server", left = { IconBtn(Ic.Back, { nav.pop() }) })
@@ -194,11 +193,6 @@ fun ServerScreen(nav: Nav) {
             }
             Spacer(Modifier.height(16.dp))
             SettingsGroup {
-                SettingsRow("Update OpenCode", subtitle = updating ?: "Check for a newer OpenCode", icon = Ic.Download, onClick = {
-                    if (updating == null) { updating = "Checking…"; scope.launch {
-                        updating = runCatching { Graph.runtime.updateOpencode(); "Up to date" }.getOrElse { it.message }
-                    } }
-                })
                 SettingsRow("Install dev tools", subtitle = "git, ripgrep, curl, python3, build-essential", icon = Ic.Terminal, onClick = {
                     val lines = mutableStateListOf<String>(); tools = lines
                     scope.launch {
@@ -332,6 +326,7 @@ fun AboutScreen(nav: Nav) {
                 SettingsRow("OpenCode documentation", icon = Ic.External, onClick = { open("https://opencode.ai/docs") })
                 SettingsRow("OpenCode Go console", icon = Ic.External, onClick = { open("https://opencode.ai/console") })
             }
+            Spacer(Modifier.height(16.dp))
             // Updates from GitHub releases
             val upd by com.celoext.data.Updater.state.collectAsState()
             SettingsGroup {
@@ -343,7 +338,7 @@ fun AboutScreen(nav: Nav) {
                         is com.celoext.data.Updater.State.Available -> "${u.r.name} is out — tap to install"
                         is com.celoext.data.Updater.State.Downloading -> "Downloading ${(u.progress * 100).toInt()}%"
                         is com.celoext.data.Updater.State.Installing -> "Installing…"
-                        is com.celoext.data.Updater.State.Failed -> u.message
+                        is com.celoext.data.Updater.State.Failed -> u.message.lines().first().take(60)
                         else -> "From releases of ${com.celoext.data.Updater.REPO}"
                     },
                     onClick = {
@@ -360,7 +355,7 @@ fun AboutScreen(nav: Nav) {
             )
             Txt(
                 "Unofficial client. Bundles open-source components from the Termux packages (GPL-2.0 / LGPL-3.0) and downloads a Linux base image and OpenCode (MIT) on first run.",
-                size = 13.sp, color = c.textDim, modifier = Modifier.padding(20.dp), lineHeight = 19.sp,
+                size = 13.sp, color = c.textDim, modifier = Modifier.padding(horizontal = 28.dp, vertical = 16.dp), lineHeight = 19.sp, align = TextAlign.Center,
             )
         }
     }

@@ -32,8 +32,7 @@ class RuntimeController(
         const val ROOTFS_URL = "https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/ubuntu-base-24.04.5-base-arm64.tar.gz"
         const val ROOTFS_SHA = "a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2"
         // Pin a tested version: the client is written against its API.
-        const val OC_VERSION = "1.19.4"
-        const val OC_SHA = "8568230ccd847dc93e95b9f6894379077d3e014a16b48040743573e77c23e85f"
+        const val OC_VERSION = "2.2.5"
         const val OC_BIN = "/usr/local/bin/opencode"
         fun ocUrl(v: String) = "https://github.com/anomalyco/opencode/releases/download/v$v/opencode-linux-arm64.tar.gz"
     }
@@ -75,7 +74,10 @@ class RuntimeController(
 
             Vault.restore()
             Memory.sync() // copies the default skills and writes their rules into AGENTS.md
-            installOpencode(OC_VERSION, OC_URL_OR(OC_VERSION), if (OC_VERSION == "1.19.4") OC_SHA else null)
+            // The checksum comes from GitHub (asset digest); no checksum, no install.
+            val ocSha = Downloader.githubAssetSha256("https://api.github.com/repos/anomalyco/opencode/releases/tags/v$OC_VERSION", "opencode-linux-arm64.tar.gz")
+                ?: error("GitHub gave no checksum for OpenCode $OC_VERSION, so it was not installed")
+            installOpencode(OC_VERSION, OC_URL_OR(OC_VERSION), ocSha)
             smokeTest()
 
             prefs.runtimeReady = true
@@ -89,27 +91,6 @@ class RuntimeController(
     }
 
     private fun OC_URL_OR(v: String) = ocUrl(v)
-
-    /** Update OpenCode to the latest 1.x release (the client is tested on 1.19.4). */
-    suspend fun updateOpencode(): String = withContext(Dispatchers.IO) {
-        val wasRunning = state.value is RuntimeState.Running
-        val latest = Regex("\"version\":\\s*\"([0-9.]+)\"").find(Downloader.getText("https://registry.npmjs.org/opencode-ai/latest"))?.groupValues?.get(1)
-            ?: error("Could not determine the latest version")
-        if (!latest.startsWith("1.")) error("Latest version $latest is not on the 1.x line; this client was only verified against 1.x")
-        if (latest == prefs.opencodeVersion) return@withContext latest
-        // No Android signature check protects this binary, so refuse to install it without a checksum.
-        val sha = Downloader.githubAssetSha256("https://api.github.com/repos/anomalyco/opencode/releases/tags/v$latest", "opencode-linux-arm64.tar.gz")
-            ?: error("GitHub gave no checksum for OpenCode $latest, so it was not installed")
-        requestStop(); delay(1500)
-        try {
-            installOpencode(latest, ocUrl(latest), sha)
-            smokeTest()
-        } finally {
-            // bring the server back even if the install failed
-            if (wasRunning) startServer()
-        }
-        latest
-    }
 
     private fun installOpencode(version: String, url: String, sha: String?) {
         val tgz = File(paths.downloads, "opencode-$version.tar.gz")

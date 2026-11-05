@@ -80,7 +80,7 @@ object Updater {
         val req = Request.Builder().url("https://api.github.com/repos/$REPO/releases?per_page=10")
             .header("Accept", "application/vnd.github+json").header("User-Agent", "opencode-mobile").build()
         val body = http.newCall(req).execute().use { r ->
-            if (r.code == 404) error("Releases not found in $REPO. The repo must be public for the in-app updater to see them.")
+            if (r.code == 404) error("No releases found in $REPO")
             if (!r.isSuccessful) error("GitHub answered HTTP ${r.code}")
             r.body.string()
         }

@@ -149,11 +149,9 @@ fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
                                 // desktop: a dim label without captions, project chips under the input
                                 com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.32f })
                             } else {
-                                com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp))
-                                Spacer(Modifier.height(28.dp))
-                                ModeLine(code)
+                                com.celoext.ui.components.LiveCat(typing = state.text.isNotEmpty())
                                 Spacer(Modifier.height(20.dp))
-                                TipLine(code)
+                                ModeLine(code)
                             }
                         }
                     }
@@ -247,41 +245,6 @@ private fun ModeLine(code: Boolean) {
         provider?.let { Txt(it.name, Modifier.padding(top = 4.dp), size = 13.sp, color = c.textDim, family = Oc.mono, maxLines = 1) }
     }
 }
-
-private val tips = listOf(
-    "Say \"remember that…\" — OpenCode keeps it on a memory shelf.",
-    "Hold a message to copy it, edit it or select text.",
-    "Tap the ghost for a chat that leaves no trace.",
-    "Scheduled runs a prompt every day at a time you pick.",
-    "Switch the model right from the composer.",
-    "Attach screenshots and photos — OpenCode can read them.",
-)
-
-private val codeTips = listOf(
-    "Pick the project in the corner before you start.",
-    "Code → Add device lets you steer OpenCode on your computer.",
-    "Permissions decide what OpenCode may change without asking.",
-    "Artifacts collects the files OpenCode wrote for you.",
-)
-
-@Composable
-private fun TipLine(code: Boolean) {
-    val c = Oc.c
-    var i by remember { mutableStateOf(0) }
-    androidx.compose.runtime.LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(6000); i = (i + 1) % tips.size } }
-    val tips = if (code) codeTips else tips
-    Row(Modifier.padding(horizontal = 36.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-        Box(Modifier.width(8.dp).height(8.dp).clip(CircleShape).background(c.warn))
-        Spacer(Modifier.width(10.dp))
-        Txt("Tip", size = 15.sp, color = c.warn, family = Oc.mono)
-        Spacer(Modifier.width(10.dp))
-        androidx.compose.animation.AnimatedContent(
-            i, label = "tip",
-            transitionSpec = { (fadeIn(androidx.compose.animation.core.tween(350)) + androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(350)) { it / 3 }) togetherWith fadeOut(androidx.compose.animation.core.tween(200)) },
-        ) { k -> Txt(tips[k], size = 15.sp, color = c.textDim, family = Oc.mono, maxLines = 2, lineHeight = 21.sp) }
-    }
-}
-
 
 /** The line under the input in the desktop look: project and Git (or memory for a regular chat). */
 @Composable
