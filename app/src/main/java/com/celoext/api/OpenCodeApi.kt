@@ -351,7 +351,7 @@ class OpenCodeApi(private val prefs: Prefs) {
     suspend fun replyQuestion(requestId: String, directory: String?, answers: List<List<String>>, sessionId: String? = null) {
         val form = formCache[requestId]
         val sid = sessionId ?: form?.str("sessionID") ?: return
-        val fields = form.arr("fields").orEmpty()
+        val fields = form?.arr("fields").orEmpty()
         val answerMap = buildJsonObject {
             fields.forEachIndexed { idx, fEl ->
                 val f = fEl as? JsonObject ?: return@forEachIndexed
