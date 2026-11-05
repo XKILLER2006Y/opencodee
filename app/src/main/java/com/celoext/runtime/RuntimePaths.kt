@@ -16,7 +16,6 @@ class RuntimePaths(ctx: Context) {
     val tmp = File(base, "tmp")
     val fake = File(base, "fake")
     val downloads = File(base, "dl")
-    val exports = File(base, "export")
 
     val opencodeBin = File(rootfs, "usr/local/bin/opencode")
     val globalAgentsMd = File(rootfs, "root/.config/opencode/AGENTS.md")

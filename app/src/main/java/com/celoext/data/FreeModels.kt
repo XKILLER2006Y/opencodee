@@ -2,7 +2,6 @@ package com.celoext.data
 
 import com.celoext.Graph
 import org.json.JSONObject
-import java.io.File
 
 /**
  * Free fallback routes for when Zen's built-in free models hit the server limit
@@ -28,16 +27,13 @@ object FreeModels {
         JSONObject(authFile.readText()).optJSONObject("github-copilot")?.optString("refresh")?.takeIf { it.isNotBlank() }
     }.getOrNull()
 
-    fun copilotAvailable(): Boolean = copilotToken() != null
-
-    fun isEnabled(providerId: String): Boolean = runCatching {
-        val o = JSONObject(configFile.readText())
-        val p = o.optJSONObject("providers") ?: o.optJSONObject("provider")
-        p?.has(providerId) == true
-    }.getOrDefault(false)
-
     private fun model(name: String, context: Int, output: Int, tools: Boolean, reasoning: Boolean, images: Boolean) = JSONObject()
-        .put("name", name).put("tool_call", tools).put("reasoning", reasoning).put("attachment", images)
+        .put("name", name)
+        .put("capabilities", JSONObject()
+            .put("tools", tools)
+            .put("input", if (images) org.json.JSONArray(listOf("text", "image")) else org.json.JSONArray(listOf("text")))
+            .put("output", org.json.JSONArray(listOf("text")))
+            .put("reasoning", JSONObject().put("supported", reasoning)))
         .put("limit", JSONObject().put("context", context).put("output", output))
 
     private fun disabledList(): List<String> = runCatching {
@@ -51,10 +47,81 @@ object FreeModels {
         if (block == null) disabled.add(providerId)
         val patch = JSONObject().put("disabled_providers", org.json.JSONArray(disabled))
         if (block != null) {
+            // OpenCode 2.x global config uses the plural `providers` namespace.
             patch.put("providers", JSONObject().put(providerId, block))
-            patch.put("provider", JSONObject().put(providerId, block))
         }
-        Graph.api.patchGlobalConfig(com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject)
+        val jsonPatch = com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject
+        try {
+            try {
+                Graph.api.patchGlobalConfig(jsonPatch)
+            } catch (first: Exception) {
+                // "HTTP 500" from the server and EACCES on the file: the config file or its folder has no write bit
+                // (seen after a restore/extract). Fix the modes from inside the environment and try the server once more.
+                if (Graph.devices.isRemote || !fixConfigPerms()) throw first
+                Graph.api.patchGlobalConfig(jsonPatch)
+            }
+        } catch (e: Exception) {
+            // The server's config write answered an error (a bare "HTTP 500" with Kamihub). The config is a plain
+            // JSON(C) file in the environment, so merge the block into it directly and let the server reload it.
+            val why = if (Graph.devices.isRemote) "remote device" else (mergeIntoFile(patch)?.let { fixConfigPerms(); mergeIntoFile(patch) })
+            if (why != null) throw IllegalStateException("Saving the provider config failed: ${e.message ?: e.javaClass.simpleName} (file fallback: $why)")
+            runCatching { Graph.api.disposeAll() }
+        }
+    }
+
+    /**
+     * Gives the app access to the config folders again. In root mode the server runs as real root and OpenCode writes its
+     * files 0600, so the app (another uid) gets EACCES: chown them back to the app. Also opens the mode bits from inside
+     * the environment. True when something ran.
+     */
+    private suspend fun fixConfigPerms(): Boolean = runCatching {
+        var ran = false
+        if (Graph.prefs.rootMode) {
+            val dirs = listOf("/root/.config/opencode", "/root/.local/share/opencode", "/root/.config", "/root/.local").map { Graph.paths.host(it).path }
+            val uid = android.os.Process.myUid()
+            val cmd = dirs.joinToString("; ") { "chown -R $uid:$uid ${com.celoext.runtime.Root.quote(it)}; chmod -R u+rwX ${com.celoext.runtime.Root.quote(it)}" }
+            ran = com.celoext.runtime.Root.run(cmd, 60).first == 0
+        }
+        val rc = Graph.runtime.runGuest(
+            listOf("/bin/bash", "-c", "mkdir -p /root/.config/opencode /root/.local/share/opencode; chmod -R a+rwX /root/.config/opencode /root/.local/share/opencode; true"),
+            timeoutSec = 30,
+        )
+        ran || rc == 0
+    }.getOrDefault(false)
+
+    /** Drops line and block comments (outside strings) and trailing commas so a .jsonc file can be parsed. */
+    private fun stripJsonc(src: String): String {
+        val o = StringBuilder(); var i = 0; var str = false
+        while (i < src.length) {
+            val ch = src[i]
+            if (str) { o.append(ch); if (ch == '\\' && i + 1 < src.length) { o.append(src[i + 1]); i++ } else if (ch == '"') str = false }
+            else if (ch == '"') { str = true; o.append(ch) }
+            else if (ch == '/' && i + 1 < src.length && src[i + 1] == '/') { while (i < src.length && src[i] != '\n') i++; continue }
+            else if (ch == '/' && i + 1 < src.length && src[i + 1] == '*') { i += 2; while (i + 1 < src.length && !(src[i] == '*' && src[i + 1] == '/')) i++; i += 2; continue }
+            else o.append(ch)
+            i++
+        }
+        return o.toString().replace(Regex(",(\\s*[}\\]])"), "$1")
+    }
+
+    /** Returns null on success, otherwise a short reason. */
+    private fun mergeIntoFile(patch: JSONObject): String? = try {
+        val f = configFile
+        val text = if (f.exists()) f.readText() else ""
+        val root = if (text.isBlank()) JSONObject() else JSONObject(stripJsonc(text))
+        fun merge(into: JSONObject, from: JSONObject) {
+            for (k in from.keys()) {
+                val v = from.get(k)
+                val cur = into.opt(k)
+                if (v is JSONObject && cur is JSONObject) merge(cur, v) else into.put(k, v)
+            }
+        }
+        merge(root, patch)
+        f.parentFile?.mkdirs()
+        f.writeText(root.toString(2))
+        null
+    } catch (e: Exception) {
+        (e.message ?: e.javaClass.simpleName).take(100)
     }
 
     /** Copilot models that answer on the free plan via /chat/completions. */
@@ -65,13 +132,14 @@ object FreeModels {
             COPILOT_ID,
             JSONObject()
                 .put("name", "GitHub Copilot")
-                .put("npm", "@ai-sdk/openai-compatible")
+                .put("package", "@opencode/ai/providers/openai-compatible")
                 .put(
-                    "options",
-                    JSONObject().put("baseURL", "https://api.githubcopilot.com").put("apiKey", token).put(
-                        "headers",
-                        JSONObject().put("Copilot-Integration-Id", "vscode-chat").put("Editor-Version", "vscode/1.107.0").put("User-Agent", "opencode-mobile"),
-                    ),
+                    "settings",
+                    JSONObject().put("baseURL", "https://api.githubcopilot.com").put("apiKey", token),
+                )
+                .put(
+                    "headers",
+                    JSONObject().put("Copilot-Integration-Id", "vscode-chat").put("Editor-Version", "vscode/1.107.0").put("User-Agent", "opencode-mobile"),
                 )
                 .put(
                     "models",
@@ -90,8 +158,8 @@ object FreeModels {
             POLLINATIONS_ID,
             JSONObject()
                 .put("name", "Pollinations (no account)")
-                .put("npm", "@ai-sdk/openai-compatible")
-                .put("options", JSONObject().put("baseURL", "https://text.pollinations.ai/openai").put("apiKey", "anonymous"))
+                .put("package", "@opencode/ai/providers/openai-compatible")
+                .put("settings", JSONObject().put("baseURL", "https://text.pollinations.ai/openai").put("apiKey", "anonymous"))
                 .put("models", JSONObject().put(POLLINATIONS_DEFAULT, model("GPT-OSS 20B", 131072, 8192, true, true, false))),
         )
         finish(POLLINATIONS_ID, POLLINATIONS_DEFAULT)
@@ -103,7 +171,7 @@ object FreeModels {
         Vault.save()
     }
 
-    private suspend fun finish(providerId: String, modelId: String) {
+    suspend fun finish(providerId: String, modelId: String) {
         runCatching { Graph.api.disposeAll() }
         runCatching { Graph.catalog.refresh() }
         Graph.prefs.providerId = providerId; Graph.prefs.modelId = modelId; Graph.prefs.variant = ""

@@ -20,7 +20,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -35,7 +34,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -60,7 +58,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -75,12 +72,9 @@ import com.celoext.runtime.RuntimeState
 import com.celoext.ui.components.Heading
 import com.celoext.ui.components.Ico
 import com.celoext.ui.components.OcSwitch
-import com.celoext.ui.components.PixelWordmark
 import com.celoext.ui.components.Txt
 import com.celoext.ui.components.tap
-import com.celoext.ui.theme.AppIcons
 import com.celoext.ui.theme.Ic
-import com.celoext.ui.theme.Looks
 import com.celoext.ui.theme.Oc
 import kotlinx.coroutines.launch
 
@@ -102,7 +96,6 @@ fun Onboarding() {
     val rt by Graph.runtime.state.collectAsState()
     var step by rememberSaveable { mutableIntStateOf(0) }
     var forward by remember { mutableStateOf(true) }
-    var icon by rememberSaveable { mutableStateOf<String?>(null) }
     var account by rememberSaveable { mutableStateOf<String?>(null) }
 
     // the environment installs right away, in parallel with the tour
@@ -113,8 +106,6 @@ fun Onboarding() {
     // "Start": first the cloud calls you in, then the home screen
     fun finish(acc: String) { if (entering == null) entering = acc }
     fun finishNow(acc: String) {
-        val chosen = icon ?: "look_cloud"
-        if (chosen != null && chosen != prefs.appIcon) { prefs.appIcon = chosen; runCatching { AppIcons.apply(ctx, chosen) } }
         prefs.loginSeen = true
         prefs.onboarded = true
         when (acc) {
@@ -159,7 +150,7 @@ fun Onboarding() {
             when (s) {
                 in 0 until TOUR -> TourStep(s)
                 TOUR -> YouStep()
-                TOUR + 1 -> SetupStep(icon ?: "look_cloud") { icon = it }
+                TOUR + 1 -> SetupStep()
                 TOUR + 2 -> AccessStep()
                 else -> AccountStep(rt, account) { a -> if (ready) finish(a) else account = a }
             }
@@ -175,6 +166,7 @@ fun Onboarding() {
             }
             Spacer(Modifier.height(12.dp))
             SetupLine(rt)
+            if (rt is RuntimeState.Crashed || rt is RuntimeState.Starting || rt is RuntimeState.InstallFailed) LogTail()
         }
     }
     entering?.let { acc -> EnterCloud { finishNow(acc) } }
@@ -460,7 +452,7 @@ private fun TourChip(icon: ImageVector, text: String) {
 // ---------- your settings (instead of picking an interface) ----------
 
 @Composable
-private fun SetupStep(icon: String, onIcon: (String) -> Unit) {
+private fun SetupStep() {
     val c = Oc.c
     val p = Graph.prefs
     var mode by remember { mutableStateOf(p.colorMode) }
@@ -474,20 +466,6 @@ private fun SetupStep(icon: String, onIcon: (String) -> Unit) {
         Spacer(Modifier.height(8.dp))
         Box(Modifier.padding(horizontal = 20.dp)) {
             com.celoext.ui.components.Segmented(listOf("system" to "System", "dark" to "Dark", "light" to "Light"), mode, { mode = it; p.colorMode = it })
-        }
-        Spacer(Modifier.height(22.dp))
-        Txt("Icon on your home screen", Modifier.padding(horizontal = 24.dp), size = 14.sp, color = c.textDim)
-        Spacer(Modifier.height(10.dp))
-        Row(Modifier.padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            AppIcons.all.filter { it.id == "look_cloud" || it.id == "cloud_light" }.forEach { ic ->
-                val sel = icon == ic.id
-                Column(Modifier.clip(Oc.round(16.dp)).tap(scale = 0.95f) { onIcon(ic.id) }.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(Modifier.size(64.dp).clip(CircleShape).background(ic.bg).border(if (sel) 3.dp else 1.dp, if (sel) c.link else c.border, CircleShape), contentAlignment = Alignment.Center) {
-                        androidx.compose.foundation.Image(painterResource(ic.previewRes), null, Modifier.requiredSize(96.dp))
-                    }
-                    Txt(if (ic.id == "cloud_light") "Light" else "Dark", Modifier.padding(top = 6.dp), size = 13.sp, color = if (sel) c.link else c.text)
-                }
-            }
         }
         Spacer(Modifier.height(18.dp))
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -554,4 +532,14 @@ private fun EnterCloud(onDone: () -> Unit) {
             }
         }
     }
+}
+
+/** Last server log lines, so a stuck setup can be diagnosed without reaching Settings. */
+@Composable
+private fun LogTail() {
+    val c = Oc.c
+    val lines by Graph.runtime.log.collectAsState()
+    if (lines.isEmpty()) return
+    Spacer(Modifier.height(10.dp))
+    Txt(lines.takeLast(10).joinToString("\n"), Modifier.fillMaxWidth(), size = 10.sp, color = c.textDim, maxLines = 14)
 }

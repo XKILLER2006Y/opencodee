@@ -1,6 +1,5 @@
 package com.celoext.ui.components
 
-import com.celoext.ui.theme.kimiLike
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.togetherWith
@@ -72,8 +71,6 @@ import kotlinx.coroutines.launch
  * the model drops down as a card from the top, "+" opens a sheet with large tiles and section rows,
  * horizontal quick-action chips above the input.
  */
-
-val isKimi: Boolean @Composable get() = Oc.look.id.kimiLike
 
 /** Inside the top bar: buttons are drawn as outlined circles (only in Kimi). */
 val LocalInTopBar = compositionLocalOf { false }

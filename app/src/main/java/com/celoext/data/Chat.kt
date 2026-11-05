@@ -13,7 +13,6 @@ import com.celoext.api.arr
 import com.celoext.api.obj
 import com.celoext.api.str
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonObject
 
 class ChatMessage(val id: String, info: MessageInfo) {
     var info by mutableStateOf(info)
@@ -77,7 +76,7 @@ class Chat(val id: String, private val api: OpenCodeApi) {
 
     suspend fun load() {
         try {
-            val list = api.messages(id, directory, 400)
+            val list = api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT)
             val fresh = list.map { m -> ChatMessage(m.info.id, m.info).also { it.parts.addAll(m.parts) } }
             val locals = messages.filter { it.id.startsWith("zzzz-local-") }
             messages.clear()
@@ -164,7 +163,10 @@ class Chat(val id: String, private val api: OpenCodeApi) {
     /** Message ids grow over time, so the order is lexicographic. */
     private fun insert(m: ChatMessage): ChatMessage {
         var i = messages.size
-        while (i > 0 && messages[i - 1].id > m.id) i--
+        // OpenCode 2.x sends no event for the user's own message, so the "local" bubble (id zzzz-local-…) stays until the
+        // next reload. Anything arriving over SSE happened after it, so never walk back past it: otherwise the reply
+        // lands above the question.
+        while (i > 0 && !messages[i - 1].id.startsWith("zzzz-local-") && messages[i - 1].id > m.id) i--
         messages.add(i, m)
         return m
     }

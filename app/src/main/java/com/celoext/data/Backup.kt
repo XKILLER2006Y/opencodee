@@ -8,7 +8,6 @@ import android.os.Build
 import android.provider.MediaStore
 import com.celoext.Graph
 import com.celoext.MainActivity
-import com.celoext.ui.theme.AppIcons
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -150,7 +149,6 @@ object Backup {
         }
         e.putBoolean("onboarded", true)
         e.commit()
-        o["app_icon"]?.let { (it as? JsonPrimitive)?.content }?.let { runCatching { AppIcons.apply(ctx, it) } }
     }
 
     /** A new process with clean settings: reopen the app and end this one. */

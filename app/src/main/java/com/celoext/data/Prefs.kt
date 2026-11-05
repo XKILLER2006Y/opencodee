@@ -84,7 +84,6 @@ class Prefs(ctx: Context) {
     var interruptedIds by str("interrupted_ids", "")     // tasks cut off by a server stop
     var updateCheckedAt by lng("update_checked_at", 0L)
     var updateSkipped by str("update_skipped", "")       // tag of the version the user asked to skip
-    var appIcon by str("app_icon", "look_cloud")
     var uiScale by str("ui_scale", "100")             // 90 | 100 | 110 | 120
     var incognitoIds by str("incognito_ids", "")
     var devicesJson by str("devices", "[]")

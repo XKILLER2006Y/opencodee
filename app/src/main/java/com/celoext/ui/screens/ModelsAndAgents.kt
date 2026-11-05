@@ -1,11 +1,8 @@
 package com.celoext.ui.screens
 
 import com.celoext.ui.theme.screenBackdrop
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,7 +21,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.celoext.Graph
-import com.celoext.api.NamedItem
 import com.celoext.api.obj
 import com.celoext.api.str
 import com.celoext.ui.Nav

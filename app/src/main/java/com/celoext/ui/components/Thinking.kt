@@ -299,26 +299,6 @@ private fun HourglassGlyph(size: Dp) {
 }
 
 @Composable
-fun PixelWave(size: Dp, color: Color) {
-    val t = rememberInfiniteTransition(label = "wave")
-    val phase by t.animateFloat(0f, 1f, infiniteRepeatable(tween(1500, easing = LinearEasing)), label = "phase")
-    Canvas(Modifier.size(size)) {
-        val n = 3
-        val gap = this.size.minDimension * 0.1f
-        val cell = (this.size.minDimension - gap * (n - 1)) / n
-        for (y in 0 until n) for (x in 0 until n) {
-            // the wave goes diagonally; scale and brightness change smoothly
-            val k = (sin((phase - (x + y) / 6f) * 2 * PI).toFloat() + 1f) / 2f
-            val s = 0.45f + 0.55f * k
-            val d = cell * s
-            val cx = x * (cell + gap) + cell / 2
-            val cy = y * (cell + gap) + cell / 2
-            drawRoundRect(color.copy(alpha = 0.35f + 0.65f * k), Offset(cx - d / 2, cy - d / 2), Size(d, d), CornerRadius(cell * 0.18f))
-        }
-    }
-}
-
-@Composable
 private fun ShimmerText(text: String) {
     val c = Oc.c
     val t = rememberInfiniteTransition(label = "shimmer")

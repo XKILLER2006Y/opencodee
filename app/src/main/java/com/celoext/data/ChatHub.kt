@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.Uri
 import com.celoext.Graph
 import com.celoext.api.EventHub
-import com.celoext.api.OcJson
 import com.celoext.api.OpenCodeApi
 import com.celoext.api.PermissionReq
 import com.celoext.api.QuestionReq
@@ -111,7 +110,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
 
     suspend fun refreshSessions() {
         try {
-            val list = api.listSessions(limit = 500)
+            val list = api.listSessions(limit = com.celoext.api.OpenCodeApi.MAX_LIMIT)
             all.value = list.associateBy { it.id }
             publish()
             loaded.value = true

@@ -164,7 +164,7 @@ data class AllProvider(val id: String, val name: String = "", val env: List<Stri
 data class AllProvidersResponse(val all: List<AllProvider> = emptyList(), val connected: List<String> = emptyList())
 
 @Serializable
-data class AuthMethod(val type: String = "api", val label: String = "")
+data class AuthMethod(val type: String = "key", val label: String = "")
 
 @Serializable
 data class AgentInfo(
@@ -209,8 +209,6 @@ fun JsonObject.arr(k: String): JsonArray? = this[k] as? JsonArray
 fun JsonObject.long(k: String): Long? = (this[k] as? JsonPrimitive)?.longOrNull
 fun JsonObject.dbl(k: String): Double? = (this[k] as? JsonPrimitive)?.doubleOrNull
 fun JsonObject.bool(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
-
-fun JsonElement.asObjOrNull(): JsonObject? = this as? JsonObject
 
 fun parseSession(o: JsonObject): Session {
     val loc = o.obj("location")

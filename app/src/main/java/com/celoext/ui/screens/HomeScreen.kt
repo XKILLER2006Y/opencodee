@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
@@ -46,10 +45,8 @@ import com.celoext.Graph
 import com.celoext.ui.Nav
 import com.celoext.ui.Route
 import com.celoext.ui.components.ComposerHost
-import com.celoext.ui.components.Heading
 import com.celoext.ui.components.Ico
 import com.celoext.ui.components.IconBtn
-import com.celoext.ui.components.Logo
 import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
 import com.celoext.ui.components.rememberComposerState
@@ -57,7 +54,6 @@ import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
 import com.celoext.ui.theme.lookBackdrop
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 @Composable
 fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
@@ -149,7 +145,8 @@ fun HomeScreen(nav: Nav, onMenu: () -> Unit, code: Boolean = false) {
                                 // desktop: a dim label without captions, project chips under the input
                                 com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.32f })
                             } else {
-                                com.celoext.ui.components.LiveCat(typing = state.text.isNotEmpty())
+                                // just the "opencode" wordmark (no mascot) with the current mode/model under it
+                                com.celoext.ui.components.PixelWordmark(Modifier.padding(horizontal = 20.dp).graphicsLayer { alpha = 0.55f })
                                 Spacer(Modifier.height(20.dp))
                                 ModeLine(code)
                             }

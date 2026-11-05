@@ -12,7 +12,6 @@ import com.celoext.api.str
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -94,10 +93,10 @@ class UsageTracker(
         refreshing.value = true
         try {
             val since = System.currentTimeMillis() - 31L * DAY
-            val list = api.listSessions(limit = 500).filter { it.time.updated >= since }
+            val list = api.listSessions(limit = com.celoext.api.OpenCodeApi.MAX_LIMIT).filter { it.time.updated >= since }
             for (s in list) {
                 if ((backfilled[s.id] ?: 0) >= s.time.updated) continue
-                val msgs = runCatching { api.messages(s.id, s.directory, 1000) }.getOrNull() ?: continue
+                val msgs = runCatching { api.messages(s.id, s.directory, com.celoext.api.OpenCodeApi.MAX_LIMIT) }.getOrNull() ?: continue
                 for (m in msgs) if (!m.info.isUser) {
                     record(
                         buildJsonObject {

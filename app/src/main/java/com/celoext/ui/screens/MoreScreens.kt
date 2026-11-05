@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,14 +46,12 @@ import com.celoext.api.OcJson
 import com.celoext.api.str
 import com.celoext.runtime.RuntimeState
 import com.celoext.ui.Nav
-import com.celoext.ui.components.Chip
 import com.celoext.ui.components.IconBtn
 import com.celoext.ui.components.OcDialog
 import com.celoext.ui.components.OcSheet
 import com.celoext.ui.components.OcSwitch
 import com.celoext.ui.components.OcTextField
 import com.celoext.ui.components.Pill
-import com.celoext.ui.components.SectionLabel
 import com.celoext.ui.components.Segmented
 import com.celoext.ui.components.SettingsGroup
 import com.celoext.ui.components.SettingsRow
@@ -66,9 +63,7 @@ import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -167,7 +162,7 @@ fun ServerScreen(nav: Nav) {
                 Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (rt is RuntimeState.Running || rt is RuntimeState.Starting) SmallButton("Stop", { Graph.runtime.stopServer() }, danger = true)
                     else SmallButton("Start", { Graph.runtime.startServer() }, filled = true)
-                    SmallButton("Restart", { Graph.runtime.stopServer(); scope.launch { kotlinx.coroutines.delay(1200); Graph.runtime.startServer() } })
+                    SmallButton("Restart", { Graph.runtime.restartServer() })
                     SmallButton("Log", { showLog = true })
                 }
             }
@@ -180,11 +175,10 @@ fun ServerScreen(nav: Nav) {
                         scope.launch {
                             val ok = Graph.runtime.setRootMode(on)
                             if (!ok) Graph.chats.toasts.tryEmit("Root was not granted (no su, or you tapped Deny)")
-                            else { Graph.runtime.stopServer(); kotlinx.coroutines.delay(1500); Graph.runtime.startServer() }
                         }
                     }
                 })
-                SettingsRow("Compatibility mode", subtitle = "Try this if the server keeps crashing on your phone", icon = Ic.Shield, trailing = { OcSwitch(prefs.noSeccomp) { prefs.noSeccomp = it } })
+                SettingsRow("Compatibility mode", subtitle = "Try this if the server keeps crashing on your phone", icon = Ic.Shield, trailing = { OcSwitch(prefs.noSeccomp) { prefs.noSeccomp = it; Graph.runtime.restartServer() } })
                 // Android 12+ kills "extra" child processes of apps (phantom process killer), and proot has many
                 SettingsRow("Server keeps stopping?", subtitle = "Developer options → turn on “Disable child process restrictions”", icon = Ic.Info, onClick = {
                     runCatching { ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }

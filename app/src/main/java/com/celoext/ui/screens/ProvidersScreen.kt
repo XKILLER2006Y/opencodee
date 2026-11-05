@@ -3,11 +3,9 @@ package com.celoext.ui.screens
 import com.celoext.ui.theme.screenBackdrop
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -144,7 +141,7 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
     var code by remember { mutableStateOf("") }
 
     LaunchedEffect(p.id) {
-        methods = runCatching { Graph.api.providerAuthMethods()[p.id] }.getOrNull().orEmpty().ifEmpty { listOf(AuthMethod("api", "API key")) }
+        methods = runCatching { Graph.api.providerAuthMethods()[p.id] }.getOrNull().orEmpty().ifEmpty { listOf(AuthMethod("key", "API key")) }
     }
 
     fun finish() { scope.launch { runCatching { Graph.api.disposeAll() }; Graph.catalog.refresh(); Graph.chats.toasts.tryEmit("${p.name} connected"); onDone() } }
@@ -153,7 +150,7 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             if (methods == null) Box(Modifier.fillMaxWidth().padding(24.dp)) { Spinner(26.dp) }
             methods?.forEachIndexed { i, m ->
-                if (m.type == "api") {
+                if (m.type == "key" || m.type == "api") {
                     Txt(m.label.ifBlank { "API key" }, size = 16.sp, color = c.textDim)
                     OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
                     if (p.id == "opencode-go" || p.id == "opencode") {
@@ -212,14 +209,20 @@ private fun KamihubSheet(onDone: () -> Unit) {
 
     OcSheet(onDone, p.name, skipHalf = false) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The model list is fetched with your key.", size = 14.sp, color = c.textDim)
+            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The key is checked with a test message, then the model list is fetched.", size = 14.sp, color = c.textDim)
             Txt("API key", size = 16.sp, color = c.textDim)
             OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
-            Pill(if (busy) "Connecting…" else "Connect", {
+            Pill(if (busy) "Testing the key…" else "Connect", {
                 busy = true; error = null
                 scope.launch {
                     runCatching { com.celoext.data.CustomProviders.connect(p, key) }
-                        .onSuccess { n -> Graph.chats.toasts.tryEmit("${p.name} connected ($n models)"); onDone() }
+                        .onSuccess { r ->
+                            Graph.chats.toasts.tryEmit(
+                                if (r.warning == null) "${p.name} connected · ${r.model.substringAfterLast('/')}"
+                                else "${p.name} added, but ${r.warning}",
+                            )
+                            onDone()
+                        }
                         .onFailure { error = it.message ?: "Could not connect" }
                     busy = false
                 }

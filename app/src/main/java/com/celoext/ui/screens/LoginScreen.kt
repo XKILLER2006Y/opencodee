@@ -1,16 +1,6 @@
 package com.celoext.ui.screens
 
 import com.celoext.ui.theme.screenBackdrop
-import android.annotation.SuppressLint
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -32,29 +22,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import com.celoext.Graph
 import com.celoext.ui.Nav
 import com.celoext.ui.Route
@@ -62,13 +44,10 @@ import com.celoext.ui.components.Ico
 import com.celoext.ui.components.IconBtn
 import com.celoext.ui.components.Heading
 import com.celoext.ui.components.PixelWordmark
-import com.celoext.ui.components.Spinner
 import com.celoext.ui.components.Txt
 import com.celoext.ui.components.tap
 import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
 
 /** Saves the OpenCode account key on the server: it works for both Zen and Go. */
