@@ -63,6 +63,76 @@ object FreeModels {
         try {
             Graph.api.patchGlobalConfig(jsonPatch)
         } catch (e: Exception) {
+            // The server's config write answered an error (a bare "HTTP 500" with Kamihub). The config is a plain
+            // JSON(C) file in the environment, so merge the block into it directly and let the server reload it.
+            val why = if (Graph.devices.isRemote) "remote device" else mergeIntoFile(patch)
+            if (why != null) throw IllegalStateException("Saving the provider config failed: ${e.message ?: e.javaClass.simpleName} (file fallback: $why)")
+            runCatching { Graph.api.disposeAll() }
+        }
+    }
+
+    /** Drops line and block comments (outside strings) and trailing commas so a .jsonc file can be parsed. */
+    private fun stripJsonc(src: String): String {
+        val o = StringBuilder(); var i = 0; var str = false
+        while (i < src.length) {
+            val ch = src[i]
+            if (str) { o.append(ch); if (ch == '\\' && i + 1 < src.length) { o.append(src[i + 1]); i++ } else if (ch == '"') str = false }
+            else if (ch == '"') { str = true; o.append(ch) }
+            else if (ch == '/' && i + 1 < src.length && src[i + 1] == '/') { while (i < src.length && src[i] != '\n') i++; continue }
+            else if (ch == '/' && i + 1 < src.length && src[i + 1] == '*') { i += 2; while (i + 1 < src.length && !(src[i] == '*' && src[i + 1] == '/')) i++; i += 2; continue }
+            else o.append(ch)
+            i++
+        }
+        return o.toString().replace(Regex(",(\\s*[}\\]])"), "$1")
+    }
+
+    /** Returns null on success, otherwise a short reason. */
+    private fun mergeIntoFile(patch: JSONObject): String? = try {
+        val f = configFile
+        val text = if (f.exists()) f.readText() else ""
+        val root = if (text.isBlank()) JSONObject() else JSONObject(stripJsonc(text))
+        fun merge(into: JSONObject, from: JSONObject) {
+            for (k in from.keys()) {
+                val v = from.get(k)
+                val cur = into.opt(k)
+                if (v is JSONObject && cur is JSONObject) merge(cur, v) else into.put(k, v)
+            }
+        }
+        merge(root, patch)
+        f.parentFile?.mkdirs()
+        f.writeText(root.toString(2))
+        null
+    } catch (e: Exception) {
+        (e.message ?: e.javaClass.simpleName).take(100)
+    }
+
+    private fun model(name: String, context: Int, output: Int, tools: Boolean, reasoning: Boolean, images: Boolean) = JSONObject()
+        .put("name", name)
+        .put("capabilities", JSONObject()
+            .put("tools", tools)
+            .put("input", if (images) org.json.JSONArray(listOf("text", "image")) else org.json.JSONArray(listOf("text")))
+            .put("output", org.json.JSONArray(listOf("text")))
+            .put("reasoning", JSONObject().put("supported", reasoning)))
+        .put("limit", JSONObject().put("context", context).put("output", output))
+
+    private fun disabledList(): List<String> = runCatching {
+        val arr = JSONObject(configFile.readText()).optJSONArray("disabled_providers") ?: return emptyList()
+        (0 until arr.length()).map { arr.getString(it) }
+    }.getOrDefault(emptyList())
+
+    /** Applied through the server: it writes the global config and picks it up at once (editing the file by hand would need a restart). */
+    internal suspend fun apply(providerId: String, block: JSONObject?) {
+        val disabled = disabledList().filter { it != providerId }.toMutableList()
+        if (block == null) disabled.add(providerId)
+        val patch = JSONObject().put("disabled_providers", org.json.JSONArray(disabled))
+        if (block != null) {
+            // OpenCode 2.x global config uses the plural `providers` namespace.
+            patch.put("providers", JSONObject().put(providerId, block))
+        }
+        val jsonPatch = com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject
+        try {
+            Graph.api.patchGlobalConfig(jsonPatch)
+        } catch (e: Exception) {
             // The server's config write answered an error (seen as a bare "HTTP 500" with Kamihub). The config is a plain
             // JSON file in the environment, so merge the block into it directly and let the server reload it.
             if (Graph.devices.isRemote || !mergeIntoFile(patch)) throw IllegalStateException("Saving the provider config failed: ${e.message ?: e.javaClass.simpleName}")
