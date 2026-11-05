@@ -6,7 +6,10 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.graphics.Color
 import com.celoext.R
 
-class AppIcon(val id: String, val label: String, val component: String, val bg: Color, val fgRes: Int)
+class AppIcon(val id: String, val label: String, val component: String, val bg: Color, val fgRes: Int) {
+    /** Resource Compose can draw: `<bitmap>` XML (the cloud icon) crashes painterResource, so use the PNG behind it. */
+    val previewRes: Int get() = if (fgRes == R.drawable.ic_fg_look_cloud) R.drawable.logo_mark_square else fgRes
+}
 
 /** The app's icon set: each one is a separate activity-alias in the manifest. */
 object AppIcons {

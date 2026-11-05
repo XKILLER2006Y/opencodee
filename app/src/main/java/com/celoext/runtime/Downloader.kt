@@ -14,7 +14,22 @@ object Downloader {
         .followRedirects(true)
         .build()
 
+    /** Thrown for HTTP 5xx: GitHub's CDN returns 502/503/504 now and then, so these are retried. */
+    private class Transient(msg: String) : RuntimeException(msg)
+
     fun fetch(url: String, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) {
+        var attempt = 0
+        while (true) {
+            try { fetchOnce(url, dest, sha256, onProgress); return }
+            catch (e: Exception) {
+                val retry = e is Transient || e is java.io.IOException
+                if (!retry || ++attempt >= 4) throw (if (e is Transient) IllegalStateException(e.message) else e)
+                Thread.sleep(2000L * attempt)
+            }
+        }
+    }
+
+    private fun fetchOnce(url: String, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) {
         dest.parentFile?.mkdirs()
         // A cached file is reused only when its checksum is known and matches (without one it may be stale or partial).
         if (dest.exists() && sha256 != null && sha256Of(dest) == sha256) {
@@ -22,6 +37,7 @@ object Downloader {
         }
         val part = File(dest.path + ".part")
         client.newCall(Request.Builder().url(url).header("User-Agent", "opencode-mobile").build()).execute().use { r ->
+            if (r.code >= 500) throw Transient("Download $url: HTTP ${r.code}")
             if (!r.isSuccessful) error("Download $url: HTTP ${r.code}")
             val body = r.body
             val total = body.contentLength()

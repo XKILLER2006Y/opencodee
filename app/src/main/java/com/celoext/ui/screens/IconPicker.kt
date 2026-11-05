@@ -52,7 +52,7 @@ fun IconPickerSheet(onDismiss: () -> Unit) {
                         Modifier.size(72.dp).clip(CircleShape).background(icon.bg)
                             .border(if (sel) 3.dp else 1.dp, if (sel) c.link else c.border, CircleShape),
                         contentAlignment = Alignment.Center,
-                    ) { Image(painterResource(icon.fgRes), null, Modifier.requiredSize(108.dp)) }
+                    ) { Image(painterResource(icon.previewRes), null, Modifier.requiredSize(108.dp)) }
                     Txt(icon.label, Modifier.padding(top = 8.dp), size = 14.sp, color = if (sel) c.link else c.text, align = TextAlign.Center, maxLines = 1)
                 }
             }

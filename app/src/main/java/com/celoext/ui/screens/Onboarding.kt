@@ -483,7 +483,7 @@ private fun SetupStep(icon: String, onIcon: (String) -> Unit) {
                 val sel = icon == ic.id
                 Column(Modifier.clip(Oc.round(16.dp)).tap(scale = 0.95f) { onIcon(ic.id) }.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Box(Modifier.size(64.dp).clip(CircleShape).background(ic.bg).border(if (sel) 3.dp else 1.dp, if (sel) c.link else c.border, CircleShape), contentAlignment = Alignment.Center) {
-                        androidx.compose.foundation.Image(painterResource(ic.fgRes), null, Modifier.requiredSize(96.dp))
+                        androidx.compose.foundation.Image(painterResource(ic.previewRes), null, Modifier.requiredSize(96.dp))
                     }
                     Txt(if (ic.id == "cloud_light") "Light" else "Dark", Modifier.padding(top = 6.dp), size = 13.sp, color = if (sel) c.link else c.text)
                 }
