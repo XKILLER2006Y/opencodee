@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -157,11 +158,11 @@ private fun tri(x1: Float, y1: Float, x2: Float, y2: Float, x3: Float, y3: Float
     moveTo(x1 * u, y1 * u); lineTo(x2 * u, y2 * u); lineTo(x3 * u, y3 * u); close()
 }
 
-private inline fun DrawScope.withScale(px: Float, py: Float, sx: Float, sy: Float, u: Float, block: DrawScope.() -> Unit) =
-    androidx.compose.ui.graphics.drawscope.withTransform({ scale(sx, sy, Offset(px * u, py * u)) }) { block() }
+private fun DrawScope.withScale(px: Float, py: Float, sx: Float, sy: Float, u: Float, block: DrawScope.() -> Unit) =
+    withTransform({ scale(sx, sy, Offset(px * u, py * u)) }) { block() }
 
-private inline fun DrawScope.withTranslate(dx: Float, dy: Float, block: DrawScope.() -> Unit) =
-    androidx.compose.ui.graphics.drawscope.withTransform({ translate(dx, dy) }) { block() }
+private fun DrawScope.withTranslate(dx: Float, dy: Float, block: DrawScope.() -> Unit) =
+    withTransform({ translate(dx, dy) }) { block() }
 
 private fun DrawScope.heart(cx: Float, cy: Float, alpha: Float, u: Float, scale: Float = 1f) {
     val a = alpha.coerceIn(0f, 1f)
