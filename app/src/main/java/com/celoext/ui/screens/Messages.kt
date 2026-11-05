@@ -524,7 +524,7 @@ fun PermissionCard(r: PermissionReq, directory: String?) {
     val scope = rememberCoroutineScope()
     fun reply(kind: String) {
         Graph.chats.permissions.value = Graph.chats.permissions.value.filterNot { it.id == r.id }
-        scope.launch { runCatching { Graph.api.replyPermission(r.id, directory, kind) } }
+        scope.launch { runCatching { Graph.api.replyPermission(r.id, directory, kind, r.sessionID) } }
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(Oc.round(24.dp)).background(c.surface).border(1.dp, c.border, Oc.round(24.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -557,10 +557,10 @@ fun QuestionPanel(q: QuestionReq, directory: String?) {
     fun done() { Graph.chats.questions.value = Graph.chats.questions.value.filterNot { it.id == q.id } }
     fun submit() {
         val answers = q.questions.indices.map { i -> picked[i].toList() + listOfNotNull(custom[i].value.trim().takeIf { it.isNotEmpty() }) }
-        done(); scope.launch { runCatching { Graph.api.replyQuestion(q.id, directory, answers) } }
+        done(); scope.launch { runCatching { Graph.api.replyQuestion(q.id, directory, answers, q.sessionID) } }
     }
     fun next() { if (page < q.questions.lastIndex) page++ else submit() }
-    fun skip() { done(); scope.launch { runCatching { Graph.api.rejectQuestion(q.id, directory) } } }
+    fun skip() { done(); scope.launch { runCatching { Graph.api.rejectQuestion(q.id, directory, q.sessionID) } } }
     val typed = custom[page].value.isNotBlank()
 
     Column(
@@ -625,7 +625,7 @@ fun PermissionPanel(r: PermissionReq, directory: String?) {
     val scope = rememberCoroutineScope()
     fun reply(kind: String) {
         Graph.chats.permissions.value = Graph.chats.permissions.value.filterNot { it.id == r.id }
-        scope.launch { runCatching { Graph.api.replyPermission(r.id, directory, kind) } }
+        scope.launch { runCatching { Graph.api.replyPermission(r.id, directory, kind, r.sessionID) } }
     }
     Column(Modifier.padding(horizontal = 12.dp).fillMaxWidth().clip(Oc.round(22.dp)).background(c.surface).border(1.dp, c.border, Oc.round(22.dp)).padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

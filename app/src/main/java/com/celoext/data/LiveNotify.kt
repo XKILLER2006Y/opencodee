@@ -186,7 +186,7 @@ object LiveNotify {
                     if (kind == "stop") { runCatching { Graph.api.abort(sid, dir) }; done(sid) }
                     else {
                         Graph.chats.permissions.value = Graph.chats.permissions.value.filterNot { it.id == rid }
-                        runCatching { Graph.api.replyPermission(rid, dir, kind) }
+                        runCatching { Graph.api.replyPermission(rid, dir, kind, sid) }
                         c.getSystemService(NotificationManager::class.java).cancel(askId(rid))
                     }
                 } finally { pr.finish() }

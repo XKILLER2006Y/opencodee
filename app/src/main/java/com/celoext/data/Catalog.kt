@@ -30,7 +30,11 @@ class Catalog(private val api: OpenCodeApi, private val prefs: Prefs, private va
             loaded.value = true
         }
         runCatching { agents.value = api.agents().filter { !it.hidden && it.mode != "subagent" } }
-        runCatching { commands.value = api.commands().sortedWith(compareBy({ if (it.source == "skill") 0 else 1 }, { it.name })) }
+        runCatching {
+            val cmds = api.commands()
+            val sks = api.skills()
+            commands.value = (cmds + sks).sortedWith(compareBy({ if (it.source == "skill") 0 else 1 }, { it.name }))
+        }
         ensureSelection()
     }
 

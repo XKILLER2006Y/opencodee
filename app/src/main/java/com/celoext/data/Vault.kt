@@ -12,8 +12,10 @@ import java.io.File
 object Vault {
     private val root get() = File(Graph.paths.rootfs.parentFile, "vault")
     private const val AUTH = "root/.local/share/opencode/auth.json"
+    private const val DB = "root/.local/share/opencode/opencode.db"
     private const val RULES = "root/.config/opencode/AGENTS.md"
     private const val CONFIG = "root/.config/opencode/opencode.jsonc"
+    private const val CONFIG_JSON = "root/.config/opencode/opencode.json"
     private const val MEMORY = "root/memory"
 
     private fun copyIfNewer(from: File, to: File) {
@@ -30,8 +32,12 @@ object Vault {
             val rf = Graph.paths.rootfs
             val auth = File(rf, AUTH)
             if (auth.isFile && auth.length() > 2 && runCatching { JSONObject(auth.readText()).length() > 0 }.getOrDefault(false)) copyIfNewer(auth, File(root, AUTH))
+            copyIfNewer(File(rf, DB), File(root, DB))
+            copyIfNewer(File(rf, "$DB-wal"), File(root, "$DB-wal"))
+            copyIfNewer(File(rf, "$DB-shm"), File(root, "$DB-shm"))
             copyIfNewer(File(rf, RULES), File(root, RULES))
             copyIfNewer(File(rf, CONFIG), File(root, CONFIG))
+            copyIfNewer(File(rf, CONFIG_JSON), File(root, CONFIG_JSON))
             File(rf, MEMORY).listFiles()?.forEach { copyIfNewer(it, File(root, "$MEMORY/${it.name}")) }
         }
     }
@@ -41,13 +47,18 @@ object Vault {
         runCatching {
             val rf = Graph.paths.rootfs
             fun back(rel: String) { val v = File(root, rel); val t = File(rf, rel); if (v.isFile && !t.isFile) { t.parentFile?.mkdirs(); v.copyTo(t) } }
-            back(AUTH); back(RULES); back(CONFIG)
+            back(AUTH); back(DB); back("$DB-wal"); back("$DB-shm"); back(RULES); back(CONFIG); back(CONFIG_JSON)
             File(root, MEMORY).listFiles()?.forEach { back("$MEMORY/${it.name}") }
         }
     }
 
     /** Explicit sign-out: wipe the copy too, otherwise the sign-in would come back after a runtime reset. */
-    fun forgetAccount() { runCatching { File(root, AUTH).delete() } }
+    fun forgetAccount() {
+        runCatching { File(root, AUTH).delete() }
+        runCatching { File(root, DB).delete() }
+        runCatching { File(root, "$DB-wal").delete() }
+        runCatching { File(root, "$DB-shm").delete() }
+    }
 
     /** The "signed in" flag in settings comes from what's actually saved on the server; the flag itself is never reset. */
     fun reconcileAccount() {

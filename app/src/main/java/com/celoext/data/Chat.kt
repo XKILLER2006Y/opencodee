@@ -21,7 +21,27 @@ class ChatMessage(val id: String, info: MessageInfo) {
 
     fun upsertPart(p: Part) {
         val i = parts.indexOfFirst { it.id == p.id }
-        if (i >= 0) parts[i] = p else parts.add(p)
+        if (i >= 0) {
+            val existing = parts[i]
+            if (p.type == "tool" && existing.type == "tool") {
+                val existingState = existing.raw.obj("state")
+                val newState = p.raw.obj("state")
+                if (existingState != null && newState != null) {
+                    val mergedState = kotlinx.serialization.json.buildJsonObject {
+                        for ((k, v) in existingState) put(k, v)
+                        for ((k, v) in newState) put(k, v)
+                    }
+                    val mergedRaw = kotlinx.serialization.json.buildJsonObject {
+                        for ((k, v) in existing.raw) put(k, v)
+                        for ((k, v) in p.raw) put(k, v)
+                        put("state", mergedState)
+                    }
+                    parts[i] = Part(mergedRaw)
+                    return
+                }
+            }
+            parts[i] = p
+        } else parts.add(p)
     }
 }
 
@@ -97,7 +117,20 @@ class Chat(val id: String, private val api: OpenCodeApi) {
             "message.updated" -> {
                 val info = props.obj("info")?.let { runCatching { OcJson.decodeFromJsonElement(MessageInfo.serializer(), it) }.getOrNull() } ?: return
                 val m = find(info.id)
-                if (m != null) m.info = info else {
+                if (m != null) {
+                    m.info = m.info.copy(
+                        role = if (info.role.isNotBlank()) info.role else m.info.role,
+                        modelID = info.modelID ?: m.info.modelID,
+                        providerID = info.providerID ?: m.info.providerID,
+                        model = info.model ?: m.info.model,
+                        agent = info.agent ?: m.info.agent,
+                        cost = info.cost ?: m.info.cost,
+                        tokens = info.tokens ?: m.info.tokens,
+                        finish = info.finish ?: m.info.finish,
+                        error = info.error ?: m.info.error,
+                        time = if (info.time.completed != null) m.info.time.copy(completed = info.time.completed) else m.info.time,
+                    )
+                } else {
                     // the real user message replaces the "local" one (the one we showed right away)
                     if (info.role == "user") messages.removeAll { it.id.startsWith("zzzz-local-") }
                     insert(ChatMessage(info.id, info))

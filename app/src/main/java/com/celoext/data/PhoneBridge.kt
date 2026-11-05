@@ -95,16 +95,32 @@ object PhoneBridge {
         if (Graph.devices.isRemote) return
         val on = Graph.prefs.phoneTools
         val url = "http://127.0.0.1:$PORT/mcp"
-        val cfgFile = Graph.paths.host("/root/.config/opencode/opencode.jsonc")
-        val cur = runCatching { org.json.JSONObject(cfgFile.readText()).optJSONObject("mcp")?.optJSONObject(NAME) }.getOrNull()
-        val same = cur != null && cur.optString("url") == url && cur.optBoolean("enabled", true) == on &&
+        val cfgFile = listOf(
+            Graph.paths.host("/root/.config/opencode/opencode.json"),
+            Graph.paths.host("/root/.config/opencode/opencode.jsonc"),
+        ).firstOrNull { it.exists() } ?: Graph.paths.host("/root/.config/opencode/opencode.json")
+        val cur = runCatching {
+            val rootObj = org.json.JSONObject(cfgFile.readText())
+            val mcpObj = rootObj.optJSONObject("mcp")
+            val serversObj = mcpObj?.optJSONObject("servers") ?: mcpObj
+            serversObj?.optJSONObject(NAME)
+        }.getOrNull()
+        val curEnabled = cur?.let { !it.optBoolean("disabled", false) && it.optBoolean("enabled", true) } ?: false
+        val same = cur != null && cur.optString("url") == url && curEnabled == on &&
             cur.optJSONObject("headers")?.optString("Authorization") == "Bearer $token"
         if (same || (cur == null && !on)) return
         val block = buildJsonObject {
-            put("type", "remote"); put("url", url); put("enabled", on)
+            put("type", "remote"); put("url", url); put("disabled", !on)
             putJsonObject("headers") { put("Authorization", "Bearer $token") }
         }
-        runCatching { Graph.api.patchGlobalConfig(buildJsonObject { putJsonObject("mcp") { put(NAME, block) } }) }
+        runCatching {
+            Graph.api.patchGlobalConfig(buildJsonObject {
+                putJsonObject("mcp") {
+                    putJsonObject("servers") { put(NAME, block) }
+                    put(NAME, block)
+                }
+            })
+        }
         runCatching { if (on) Graph.api.mcpConnect(NAME) else Graph.api.mcpDisconnect(NAME) }
     }
 

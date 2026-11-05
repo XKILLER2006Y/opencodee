@@ -6,6 +6,7 @@ import com.celoext.api.ProvidersResponse
 import com.celoext.api.Session
 import com.celoext.api.obj
 import com.celoext.api.parseMessages
+import com.celoext.api.parseSession
 import com.celoext.api.str
 import com.celoext.runtime.TarExtractor
 import kotlinx.serialization.builtins.ListSerializer
@@ -34,6 +35,81 @@ class ApiModelsTest {
         assertTrue(m[0].info.isUser)
         assertEquals("text", m[0].parts[0].type)
         assertEquals("big-pickle", m[1].info.modelName)
+    }
+
+    @Test fun v2SessionParsing() {
+        val json = """
+            {
+              "id": "ses_019a4b2c3d4e",
+              "title": "Fix crash",
+              "projectID": "prj_root",
+              "cost": 0.0042,
+              "tokens": { "input": 100, "output": 50, "reasoning": 20, "cache": { "read": 10, "write": 5 } },
+              "time": { "created": 1700000000000, "updated": 1700000001000 },
+              "location": { "directory": "/home/user/project" },
+              "model": { "id": "claude-3-5-sonnet", "providerID": "anthropic" }
+            }
+        """.trimIndent()
+        val s = parseSession(OcJson.parseToJsonElement(json) as JsonObject)
+        assertEquals("ses_019a4b2c3d4e", s.id)
+        assertEquals("Fix crash", s.title)
+        assertEquals("/home/user/project", s.directory)
+        assertEquals(0.0042, s.cost!!, 0.0001)
+        assertEquals(185L, s.tokens!!.sum)
+        assertEquals("claude-3-5-sonnet", s.model!!.model)
+        assertEquals("anthropic", s.model!!.providerID)
+    }
+
+    @Test fun v2MessagesParsing() {
+        val json = """
+            {
+              "data": [
+                {
+                  "type": "user",
+                  "id": "msg_01",
+                  "text": "run tests",
+                  "time": { "created": 1700000000000 }
+                },
+                {
+                  "type": "assistant",
+                  "id": "msg_02",
+                  "agent": "build",
+                  "model": { "id": "claude-3-5-sonnet", "providerID": "anthropic" },
+                  "content": [
+                    { "type": "text", "text": "Running tests..." },
+                    {
+                      "type": "tool",
+                      "id": "tool_01",
+                      "name": "shell",
+                      "state": {
+                        "status": "completed",
+                        "input": { "command": "./gradlew test" },
+                        "content": [ { "type": "text", "text": "BUILD SUCCESSFUL" } ]
+                      }
+                    }
+                  ],
+                  "cost": 0.001,
+                  "time": { "created": 1700000001000, "completed": 1700000005000 }
+                }
+              ]
+            }
+        """.trimIndent()
+        val msgs = parseMessages(OcJson.parseToJsonElement(json), defaultSessionID = "ses_test")
+        assertEquals(2, msgs.size)
+        assertTrue(msgs[0].info.isUser)
+        assertEquals("run tests", msgs[0].parts[0].text)
+
+        val a = msgs[1]
+        assertTrue(!a.info.isUser)
+        assertEquals("claude-3-5-sonnet", a.info.modelName)
+        assertEquals(2, a.parts.size)
+        assertEquals("text", a.parts[0].type)
+        assertEquals("Running tests...", a.parts[0].text)
+        assertEquals("tool", a.parts[1].type)
+        assertEquals("bash", a.parts[1].raw.str("tool"))
+        assertEquals("completed", a.parts[1].raw.obj("state")?.str("status"))
+        assertEquals("./gradlew test", a.parts[1].raw.obj("state")?.obj("input")?.str("command"))
+        assertEquals("BUILD SUCCESSFUL", a.parts[1].raw.obj("state")?.str("output"))
     }
 
     @Test fun providers() {

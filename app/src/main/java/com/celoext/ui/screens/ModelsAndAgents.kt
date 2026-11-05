@@ -55,12 +55,13 @@ fun ModelsScreen(nav: Nav) {
     var pickMain by remember { mutableStateOf(false) }
     var pickSmall by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { cfg = runCatching { Graph.api.config() }.getOrDefault(cfg) }
+    val currentSmall = cfg.str("small_model") ?: cfg.obj("agents")?.obj("title")?.str("model")
     Column(Modifier.fillMaxSize().screenBackdrop("ModelsAndAgents1")) {
         TopBar("Models", left = { IconBtn(Ic.Back, { nav.pop() }) })
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 32.dp)) {
             SettingsGroup {
                 SettingsRow("Model for new messages", subtitle = Graph.catalog.selectedLabel(), icon = Ic.Cpu, chevron = true, onClick = { pickMain = true })
-                SettingsRow("Small model", subtitle = cfg.str("small_model") ?: "Auto (titles & summaries)", icon = Ic.Sparkle, chevron = true, onClick = { pickSmall = true })
+                SettingsRow("Small model", subtitle = currentSmall ?: "Auto (titles & summaries)", icon = Ic.Sparkle, chevron = true, onClick = { pickSmall = true })
             }
             SectionLabel("Available")
             SettingsGroup {
@@ -71,11 +72,11 @@ fun ModelsScreen(nav: Nav) {
     if (pickMain) ModelSheet { pickMain = false }
     if (pickSmall) OcSheet({ pickSmall = false }, "Small model", skipHalf = false) {
         LazyColumn(Modifier.padding(bottom = 24.dp)) {
-            item { ChoiceRow("Auto", cfg.str("small_model") == null, { pickSmall = false }, subtitle = "Let OpenCode choose") }
+            item { ChoiceRow("Auto", currentSmall == null, { pickSmall = false }, subtitle = "Let OpenCode choose") }
             providers.forEach { p ->
                 items(p.models.values.toList(), key = { p.id + it.id }) { m ->
                     val ref = p.id + "/" + m.id
-                    ChoiceRow(m.name.ifBlank { m.id }, cfg.str("small_model") == ref, {
+                    ChoiceRow(m.name.ifBlank { m.id }, currentSmall == ref, {
                         pickSmall = false
                         scope.launch { cfg = runCatching { Graph.api.patchConfig(buildJsonObject { put("small_model", ref) }) }.getOrDefault(cfg) }
                     }, subtitle = p.name)
@@ -91,14 +92,29 @@ fun PermissionsScreen(nav: Nav) {
     val scope = rememberCoroutineScope()
     var cfg by remember { mutableStateOf(JsonObject(emptyMap())) }
     LaunchedEffect(Unit) { cfg = runCatching { Graph.api.config() }.getOrDefault(cfg) }
-    val perm = cfg["permission"]
+    val perm = cfg["permission"] ?: cfg["permissions"]
     fun valueOf(k: String): String = when (perm) {
         is JsonPrimitive -> perm.content
         is JsonObject -> (perm[k] as? JsonPrimitive)?.content ?: "default"
+        is JsonArray -> {
+            val mappedAction = when (k) { "bash" -> "shell"; "task" -> "subagent"; else -> k }
+            val rule = perm.mapNotNull { it as? JsonObject }.lastOrNull { it.str("action") == mappedAction || it.str("action") == k }
+            rule?.str("effect") ?: "default"
+        }
         else -> "default"
     }
     fun set(k: String, v: String) = scope.launch {
-        cfg = runCatching { Graph.api.patchConfig(buildJsonObject { put("permission", buildJsonObject { put(k, v) }) }) }.getOrDefault(cfg)
+        val mappedAction = when (k) { "bash" -> "shell"; "task" -> "subagent"; else -> k }
+        val rule = buildJsonObject {
+            put("action", mappedAction)
+            put("resource", "*")
+            put("effect", v)
+        }
+        val patch = buildJsonObject {
+            put("permission", buildJsonObject { put(k, v) })
+            put("permissions", kotlinx.serialization.json.buildJsonArray { add(rule) })
+        }
+        cfg = runCatching { Graph.api.patchConfig(patch) }.getOrDefault(cfg)
     }
     val opts = listOf("allow" to "Allow", "ask" to "Ask", "deny" to "Deny")
     Column(Modifier.fillMaxSize().screenBackdrop("ModelsAndAgents2")) {

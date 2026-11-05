@@ -18,7 +18,10 @@ object FreeModels {
     const val COPILOT_DEFAULT = "gpt-4.1-2025-04-14"
     const val POLLINATIONS_DEFAULT = "openai-fast"
 
-    private val configFile get() = Graph.paths.host("/root/.config/opencode/opencode.jsonc")
+    private val configFile get() = listOf(
+        Graph.paths.host("/root/.config/opencode/opencode.json"),
+        Graph.paths.host("/root/.config/opencode/opencode.jsonc"),
+    ).firstOrNull { it.exists() } ?: Graph.paths.host("/root/.config/opencode/opencode.json")
     private val authFile get() = Graph.paths.host("/root/.local/share/opencode/auth.json")
 
     private fun copilotToken(): String? = runCatching {
@@ -28,7 +31,9 @@ object FreeModels {
     fun copilotAvailable(): Boolean = copilotToken() != null
 
     fun isEnabled(providerId: String): Boolean = runCatching {
-        JSONObject(configFile.readText()).optJSONObject("provider")?.has(providerId) == true
+        val o = JSONObject(configFile.readText())
+        val p = o.optJSONObject("providers") ?: o.optJSONObject("provider")
+        p?.has(providerId) == true
     }.getOrDefault(false)
 
     private fun model(name: String, context: Int, output: Int, tools: Boolean, reasoning: Boolean, images: Boolean) = JSONObject()
@@ -45,7 +50,10 @@ object FreeModels {
         val disabled = disabledList().filter { it != providerId }.toMutableList()
         if (block == null) disabled.add(providerId)
         val patch = JSONObject().put("disabled_providers", org.json.JSONArray(disabled))
-        if (block != null) patch.put("provider", JSONObject().put(providerId, block))
+        if (block != null) {
+            patch.put("providers", JSONObject().put(providerId, block))
+            patch.put("provider", JSONObject().put(providerId, block))
+        }
         Graph.api.patchGlobalConfig(com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject)
     }
 

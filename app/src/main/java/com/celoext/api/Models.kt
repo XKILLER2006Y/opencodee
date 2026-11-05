@@ -209,19 +209,177 @@ fun JsonObject.bool(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanO
 
 fun JsonElement.asObjOrNull(): JsonObject? = this as? JsonObject
 
-fun parsePermission(o: JsonObject) = PermissionReq(
-    id = o.str("id") ?: "",
-    sessionID = o.str("sessionID") ?: "",
-    permission = o.str("permission") ?: "",
-    patterns = o.arr("patterns")?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty(),
-    metadata = o.obj("metadata") ?: JsonObject(emptyMap()),
-    callID = o.obj("tool")?.str("callID"),
-)
+fun parseSession(o: JsonObject): Session {
+    val loc = o.obj("location")
+    val dir = loc?.str("directory") ?: o.str("directory") ?: ""
+    val timeObj = o.obj("time")
+    val time = if (timeObj != null) {
+        TimeInfo(
+            created = timeObj.long("created") ?: 0L,
+            updated = timeObj.long("updated") ?: 0L,
+            completed = timeObj.long("completed"),
+            archived = timeObj.long("archived"),
+        )
+    } else TimeInfo()
 
-fun parseQuestion(o: JsonObject) = QuestionReq(
-    id = o.str("id") ?: "",
-    sessionID = o.str("sessionID") ?: "",
-    questions = o.arr("questions")?.map { q ->
+    val modelObj = o.obj("model")
+    val modelRef = if (modelObj != null) {
+        ModelRef(
+            id = modelObj.str("id"),
+            modelID = modelObj.str("model") ?: modelObj.str("modelID") ?: modelObj.str("id"),
+            providerID = modelObj.str("providerID") ?: "",
+            variant = modelObj.str("variant"),
+        )
+    } else null
+
+    val tokensObj = o.obj("tokens")
+    val tokens = if (tokensObj != null) {
+        val cacheObj = tokensObj.obj("cache")
+        Tokens(
+            input = tokensObj.long("input") ?: 0L,
+            output = tokensObj.long("output") ?: 0L,
+            reasoning = tokensObj.long("reasoning") ?: 0L,
+            total = tokensObj.long("total"),
+            cache = CacheTokens(
+                read = cacheObj?.long("read") ?: 0L,
+                write = cacheObj?.long("write") ?: 0L,
+            ),
+        )
+    } else null
+
+    return Session(
+        id = o.str("id") ?: "",
+        title = o.str("title") ?: "",
+        directory = dir,
+        projectID = o.str("projectID"),
+        parentID = o.str("parentID"),
+        cost = o.dbl("cost"),
+        tokens = tokens,
+        time = time,
+        agent = o.str("agent"),
+        model = modelRef,
+        summary = o.obj("summary"),
+    )
+}
+
+fun parseModelInfo(o: JsonObject): ModelInfo {
+    val id = o.str("id") ?: ""
+    val name = o.str("name") ?: id
+    val providerID = o.str("providerID") ?: ""
+    val family = o.str("family")
+    val status = o.str("status")
+
+    val limitObj = o.obj("limit")
+    val limit = if (limitObj != null) {
+        Limit(
+            context = limitObj.long("context") ?: 0L,
+            output = limitObj.long("output") ?: 0L,
+        )
+    } else null
+
+    val capsObj = o.obj("capabilities")
+    val caps = if (capsObj != null) {
+        val inputEl = capsObj["input"]
+        val modalities = when (inputEl) {
+            is JsonArray -> {
+                val set = inputEl.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.toSet()
+                Modalities(
+                    text = "text" in set,
+                    image = "image" in set,
+                    pdf = "pdf" in set,
+                    audio = "audio" in set,
+                    video = "video" in set,
+                )
+            }
+            is JsonObject -> {
+                Modalities(
+                    text = inputEl.bool("text") ?: false,
+                    image = inputEl.bool("image") ?: false,
+                    pdf = inputEl.bool("pdf") ?: false,
+                    audio = inputEl.bool("audio") ?: false,
+                    video = inputEl.bool("video") ?: false,
+                )
+            }
+            else -> Modalities()
+        }
+        val isReasoning = capsObj.bool("reasoning") ?: (capsObj.obj("reasoning") != null)
+        Caps(
+            reasoning = isReasoning,
+            attachment = modalities.image || modalities.pdf,
+            toolcall = capsObj.bool("tools") ?: capsObj.bool("toolcall") ?: false,
+            input = modalities,
+        )
+    } else null
+
+    val variantsObj = when (val vEl = o["variants"]) {
+        is JsonArray -> vEl.mapNotNull { it as? JsonObject }.associateBy { it.str("id") ?: "" }
+        is JsonObject -> vEl.entries.associate { (k, v) -> k to (v as? JsonObject ?: JsonObject(emptyMap())) }
+        else -> null
+    }
+
+    val releaseDate = o.obj("time")?.long("released")?.toString() ?: o.str("release_date")
+
+    return ModelInfo(
+        id = id,
+        name = name,
+        providerID = providerID,
+        family = family,
+        status = status,
+        capabilities = caps,
+        limit = limit,
+        cost = o.obj("cost"),
+        variants = variantsObj,
+        release_date = releaseDate,
+    )
+}
+
+fun parsePermission(o: JsonObject): PermissionReq {
+    val rawAction = o.str("action") ?: o.str("permission") ?: ""
+    val mappedAction = when (rawAction) {
+        "shell" -> "bash"
+        "subagent" -> "task"
+        "write", "patch", "apply_patch" -> "edit"
+        else -> rawAction
+    }
+    val patterns = (o.arr("resources") ?: o.arr("patterns"))?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }.orEmpty()
+    val callID = o.obj("source")?.str("id") ?: o.obj("tool")?.str("callID")
+    return PermissionReq(
+        id = o.str("id") ?: "",
+        sessionID = o.str("sessionID") ?: "",
+        permission = mappedAction,
+        patterns = patterns,
+        metadata = o.obj("metadata") ?: JsonObject(emptyMap()),
+        callID = callID,
+    )
+}
+
+fun parseQuestion(o: JsonObject): QuestionReq {
+    val id = o.str("id") ?: ""
+    val sessionID = o.str("sessionID") ?: ""
+    val fieldsArr = o.arr("fields")
+    if (fieldsArr != null) {
+        val items = fieldsArr.mapNotNull { fEl ->
+            val f = fEl as? JsonObject ?: return@mapNotNull null
+            val key = f.str("key") ?: return@mapNotNull null
+            val fTitle = f.str("title") ?: key
+            val fDesc = f.str("description") ?: fTitle
+            val fType = f.str("type") ?: "string"
+            val options = f.arr("options")?.mapNotNull { optEl ->
+                val oo = optEl as? JsonObject ?: return@mapNotNull null
+                QuestionOption(oo.str("label") ?: oo.str("value") ?: "", oo.str("description") ?: "")
+            }.orEmpty()
+            QuestionItem(
+                question = fDesc,
+                header = fTitle,
+                options = options,
+                multiple = fType == "multiselect",
+                custom = f.bool("custom") ?: (options.isEmpty() || fType == "string"),
+            )
+        }
+        return QuestionReq(id = id, sessionID = sessionID, questions = items)
+    }
+
+    val questions = o.arr("questions")?.map { q ->
         val qo = q.jsonObject
         QuestionItem(
             question = qo.str("question") ?: "",
@@ -233,15 +391,221 @@ fun parseQuestion(o: JsonObject) = QuestionReq(
             multiple = qo.bool("multiple") ?: false,
             custom = qo.bool("custom") ?: true,
         )
-    }.orEmpty(),
-)
+    }.orEmpty()
+    return QuestionReq(id = id, sessionID = sessionID, questions = questions)
+}
 
-fun parseMessages(el: JsonElement): List<MessageWithParts> =
-    (el as? JsonArray).orEmpty().mapNotNull { m ->
-        val o = m as? JsonObject ?: return@mapNotNull null
-        val info = o.obj("info")?.let { runCatching { OcJson.decodeFromJsonElement(MessageInfo.serializer(), it) }.getOrNull() }
-            ?: return@mapNotNull null
-        MessageWithParts(info, o.arr("parts").orEmpty().mapNotNull { (it as? JsonObject)?.let(::Part) })
+fun parseMessages(el: JsonElement, defaultSessionID: String = ""): List<MessageWithParts> {
+    val arr = when (el) {
+        is JsonArray -> el
+        is JsonObject -> el.arr("data") ?: JsonArray(emptyList())
+        else -> JsonArray(emptyList())
     }
+    if (arr.isEmpty()) return emptyList()
+
+    val first = arr.firstOrNull() as? JsonObject
+    if (first != null && first.containsKey("info") && first.containsKey("parts")) {
+        return arr.mapNotNull { m ->
+            val o = m as? JsonObject ?: return@mapNotNull null
+            val info = o.obj("info")?.let { runCatching { OcJson.decodeFromJsonElement(MessageInfo.serializer(), it) }.getOrNull() }
+                ?: return@mapNotNull null
+            MessageWithParts(info, o.arr("parts").orEmpty().mapNotNull { (it as? JsonObject)?.let(::Part) })
+        }
+    }
+
+    val out = ArrayList<MessageWithParts>()
+    var lastUserID: String? = null
+
+    for (item in arr) {
+        val o = item as? JsonObject ?: continue
+        val type = o.str("type") ?: continue
+        val id = o.str("id") ?: continue
+        val sessionID = o.str("sessionID") ?: defaultSessionID
+        val timeObj = o.obj("time")
+        val created = timeObj?.long("created") ?: 0L
+        val completed = timeObj?.long("completed") ?: timeObj?.long("streamed")
+
+        when (type) {
+            "user" -> {
+                lastUserID = id
+                val info = MessageInfo(
+                    id = id,
+                    sessionID = sessionID,
+                    role = "user",
+                    time = TimeInfo(created = created, completed = completed),
+                )
+                val parts = ArrayList<Part>()
+                val text = o.str("text")
+                if (!text.isNullOrEmpty()) {
+                    parts.add(Part(buildJsonObject {
+                        put("id", "$id-text")
+                        put("messageID", id)
+                        put("sessionID", sessionID)
+                        put("type", "text")
+                        put("text", text)
+                    }))
+                }
+                o.arr("files")?.forEachIndexed { idx, fEl ->
+                    val f = fEl as? JsonObject ?: return@forEachIndexed
+                    val mime = f.str("mime") ?: "application/octet-stream"
+                    val name = f.str("name") ?: "file-$idx"
+                    val b64 = f.str("data")
+                    val uri = f.obj("source")?.str("uri") ?: f.str("uri")
+                    val url = if (b64 != null) "data:$mime;base64,$b64" else uri ?: ""
+                    parts.add(Part(buildJsonObject {
+                        put("id", "$id-file-$idx")
+                        put("messageID", id)
+                        put("sessionID", sessionID)
+                        put("type", "file")
+                        put("mime", mime)
+                        put("filename", name)
+                        put("url", url)
+                    }))
+                }
+                out.add(MessageWithParts(info, parts))
+            }
+            "assistant" -> {
+                val modelObj = o.obj("model")
+                val modelRef = if (modelObj != null) {
+                    ModelRef(
+                        id = modelObj.str("id"),
+                        modelID = modelObj.str("model") ?: modelObj.str("id"),
+                        providerID = modelObj.str("providerID") ?: "",
+                        variant = modelObj.str("variant"),
+                    )
+                } else null
+
+                val tokensObj = o.obj("tokens")
+                val tokens = if (tokensObj != null) {
+                    val cacheObj = tokensObj.obj("cache")
+                    Tokens(
+                        input = tokensObj.long("input") ?: 0L,
+                        output = tokensObj.long("output") ?: 0L,
+                        reasoning = tokensObj.long("reasoning") ?: 0L,
+                        total = tokensObj.long("total"),
+                        cache = CacheTokens(
+                            read = cacheObj?.long("read") ?: 0L,
+                            write = cacheObj?.long("write") ?: 0L,
+                        ),
+                    )
+                } else null
+
+                val info = MessageInfo(
+                    id = id,
+                    sessionID = sessionID,
+                    role = "assistant",
+                    parentID = lastUserID,
+                    modelID = modelRef?.model,
+                    providerID = modelRef?.providerID,
+                    model = modelRef,
+                    agent = o.str("agent"),
+                    cost = o.dbl("cost"),
+                    tokens = tokens,
+                    finish = o.str("finish"),
+                    error = o.obj("error"),
+                    time = TimeInfo(created = created, completed = completed),
+                )
+                val parts = ArrayList<Part>()
+                o.arr("content")?.forEachIndexed { idx, cEl ->
+                    val c = cEl as? JsonObject ?: return@forEachIndexed
+                    val cType = c.str("type") ?: ""
+                    when (cType) {
+                        "text" -> {
+                            parts.add(Part(buildJsonObject {
+                                put("id", "$id-text-$idx")
+                                put("messageID", id)
+                                put("sessionID", sessionID)
+                                put("type", "text")
+                                put("text", c.str("text") ?: "")
+                            }))
+                        }
+                        "reasoning" -> {
+                            parts.add(Part(buildJsonObject {
+                                put("id", "$id-reasoning-$idx")
+                                put("messageID", id)
+                                put("sessionID", sessionID)
+                                put("type", "reasoning")
+                                put("text", c.str("text") ?: "")
+                            }))
+                        }
+                        "tool" -> {
+                            val toolId = c.str("id") ?: "$id-tool-$idx"
+                            val rawToolName = c.str("name") ?: "tool"
+                            val mappedToolName = when (rawToolName) {
+                                "shell" -> "bash"
+                                "subagent" -> "task"
+                                else -> rawToolName
+                            }
+                            val stateObj = c.obj("state")
+                            val rawStatus = stateObj?.str("status") ?: "completed"
+                            val mappedStatus = when (rawStatus) {
+                                "streaming" -> "running"
+                                else -> rawStatus
+                            }
+                            val input = stateObj?.get("input") ?: JsonObject(emptyMap())
+                            val outputText = stateObj?.arr("content")?.joinToString("\n") {
+                                (it as? JsonObject)?.str("text") ?: ""
+                            } ?: stateObj?.str("text") ?: ""
+                            val metadata = stateObj?.obj("metadata")
+                            val stateTime = c.obj("time")
+
+                            val mappedState = buildJsonObject {
+                                put("status", mappedStatus)
+                                put("input", input)
+                                if (outputText.isNotEmpty()) put("output", outputText)
+                                metadata?.let { put("metadata", it) }
+                                stateObj?.obj("error")?.let { put("error", it) }
+                                putJsonObject("time") {
+                                    stateTime?.long("ran")?.let { put("start", it) }
+                                    stateTime?.long("completed")?.let { put("end", it) }
+                                }
+                            }
+
+                            parts.add(Part(buildJsonObject {
+                                put("id", toolId)
+                                put("messageID", id)
+                                put("sessionID", sessionID)
+                                put("type", "tool")
+                                put("tool", mappedToolName)
+                                put("state", mappedState)
+                            }))
+                        }
+                    }
+                }
+                out.add(MessageWithParts(info, parts))
+            }
+            "shell" -> {
+                val command = o.str("command") ?: ""
+                val output = o.str("output") ?: ""
+                val status = if (o.str("status") == "failed") "error" else "completed"
+                val info = MessageInfo(
+                    id = id,
+                    sessionID = sessionID,
+                    role = "assistant",
+                    parentID = lastUserID,
+                    time = TimeInfo(created = created, completed = completed),
+                )
+                val part = Part(buildJsonObject {
+                    put("id", "$id-shell")
+                    put("messageID", id)
+                    put("sessionID", sessionID)
+                    put("type", "tool")
+                    put("tool", "bash")
+                    putJsonObject("state") {
+                        put("status", status)
+                        putJsonObject("input") { put("command", command) }
+                        put("output", output)
+                        putJsonObject("time") {
+                            put("start", created)
+                            completed?.let { put("end", it) }
+                        }
+                    }
+                })
+                out.add(MessageWithParts(info, listOf(part)))
+            }
+        }
+    }
+    return out
+}
 
 private fun JsonArray?.orEmpty() = this ?: JsonArray(emptyList())

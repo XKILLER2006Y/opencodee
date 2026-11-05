@@ -12,6 +12,7 @@ import com.celoext.api.Session
 import com.celoext.api.obj
 import com.celoext.api.parsePermission
 import com.celoext.api.parseQuestion
+import com.celoext.api.parseSession
 import com.celoext.api.str
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -126,7 +127,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             }
             val (auto, manual) = perms.partition { autoAllows(it.permission) }
             permissions.value = manual
-            auto.forEach { r -> Graph.scope.launch { runCatching { api.replyPermission(r.id, session(r.sessionID)?.directory, "once") } } }
+            auto.forEach { r -> Graph.scope.launch { runCatching { api.replyPermission(r.id, session(r.sessionID)?.directory, "once", r.sessionID) } } }
             questions.value = qs
             findInterrupted(st.keys)
             statuses.value = st
@@ -164,8 +165,8 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     private fun handle(e: EventHub.Event) {
         val p = e.props
         when (e.type) {
-            "session.created", "session.updated" -> p.obj("info")?.let {
-                runCatching { OcJson.decodeFromJsonElement(Session.serializer(), it) }.getOrNull()?.let(::upsert)
+            "session.created", "session.updated" -> p.obj("info")?.let { infoObj ->
+                runCatching { parseSession(infoObj) }.getOrNull()?.let(::upsert)
             }
             "session.deleted" -> p.obj("info")?.str("id")?.let { id -> all.update { it - id }; publish() }
             "session.status" -> {
@@ -183,13 +184,22 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                     if (st.str("message")?.contains("Free usage", ignoreCase = true) == true && prefs.providerId != FreeModels.POLLINATIONS_ID) fallToPollinations(id)
                 } else retries.update { it - id }
             }
-            "session.idle" -> p.str("sessionID")?.let { id -> val was = statuses.value[id]; statuses.update { it - id }; saveBusy(); if (was != null) finished(id) }
+            "session.idle" -> p.str("sessionID")?.let { id ->
+                val was = statuses.value[id]
+                statuses.update { it - id }
+                saveBusy()
+                if (was != null) finished(id)
+                Graph.scope.launch {
+                    delay(300)
+                    chats[id]?.load()
+                }
+            }
             "permission.asked" -> {
                 val r = parsePermission(p)
                 // the mode already allows this: answer ourselves, don't bother the user (old sessions, agent rules)
                 if (autoAllows(r.permission)) {
                     val dir = e.directory ?: session(r.sessionID)?.directory
-                    Graph.scope.launch { runCatching { api.replyPermission(r.id, dir, "once") }.onFailure { permissions.update { l -> l.filterNot { it.id == r.id } + r } } }
+                    Graph.scope.launch { runCatching { api.replyPermission(r.id, dir, "once", r.sessionID) }.onFailure { permissions.update { l -> l.filterNot { it.id == r.id } + r } } }
                 } else permissions.update { l -> l.filterNot { it.id == r.id } + r }
             }
             "permission.replied" -> p.str("requestID")?.let { rid -> permissions.update { l -> l.filterNot { it.id == rid } } }
@@ -244,8 +254,18 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     fun codeOnly(l: List<Session>) = if (Graph.devices.isRemote) l
         else l.filter { s -> s.parentID.isNullOrBlank() && !isIncognito(s.id) && (!isChat(s) || ChatKind.of(s) == ChatKind.Code) }
 
-    private fun rule(permission: String, action: String, pattern: String = "*") = buildJsonObject {
-        put("permission", permission); put("pattern", pattern); put("action", action)
+    private fun rule(action: String, effect: String, resource: String = "*"): JsonObject {
+        val mappedAction = when (action) {
+            "bash" -> "shell"
+            "task" -> "subagent"
+            "edit", "write", "patch" -> "edit"
+            else -> action
+        }
+        return buildJsonObject {
+            put("action", mappedAction)
+            put("resource", resource)
+            put("effect", effect)
+        }
     }
 
     /** Sessions whose rules are already set for the current mode (when the mode changes, we set them again). */

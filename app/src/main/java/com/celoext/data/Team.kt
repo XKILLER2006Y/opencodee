@@ -80,10 +80,12 @@ object Team {
         if (!force && key == synced) return
         val have = runCatching { Graph.api.agents().map { it.name }.filter { it.startsWith("team-") } }.getOrDefault(emptyList())
         val patch = buildJsonObject {
-            put("agent", buildJsonObject {
+            val block = buildJsonObject {
                 want.forEach { (k, v) -> put(k, v) }
-                (have - want.keys).forEach { put(it, buildJsonObject { put("disable", true) }) }
-            })
+                (have - want.keys).forEach { put(it, buildJsonObject { put("disabled", true); put("disable", true) }) }
+            }
+            put("agents", block)
+            put("agent", block)
         }
         // shared config: chats and projects live in different folders, helpers are needed in all of them
         if (runCatching { Graph.api.patchGlobalConfig(patch) }.isSuccess) synced = key
