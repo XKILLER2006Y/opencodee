@@ -13,11 +13,11 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "app.ocmobile"
+    namespace = "com.celoext"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "app.ocmobile"
+        applicationId = "com.celoext"
         minSdk = 26
         // 28 on purpose: proot runs binaries from the app data directory,
         // and with targetSdk >= 29 Android forbids exec from app_data_file (same as Termux).

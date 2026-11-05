@@ -26,7 +26,11 @@ Current version: **v0.0.1 beta-4**. Android 8+, arm64. Unofficial client.
 
 **GitHub.** Sign in once with a device code. The app installs git and the GitHub CLI in Ubuntu and sets git to your name and noreply email. After that the agent can clone, commit, push and open pull requests as you. It is told never to add Co-Authored-By or other AI attribution.
 
-**Phone tools.** The app exposes an MCP server to the agent, so it can show notifications, set reminders and alarms, read and fill the clipboard, take a photo, get your location, save files to Downloads and share them. Each tool can be switched off. Sites the agent builds open in a live preview inside the app.
+**Interface.** Material 3 (Material You): dynamic wallpaper colors on Android 12+, tonal surfaces, M3 buttons, switches, sheets and dialogs.
+
+**Root mode.** Settings → OpenCode → “Run as root” starts proot through `su`, so Ubuntu can read the Termux home and other protected paths.
+
+**Phone tools.** The app exposes an MCP server to the agent, so it can show notifications, set reminders, read and fill the clipboard, take a photo, save files to Downloads and share them. Each tool can be switched off. Sites the agent builds open in a live preview inside the app.
 
 **Usage.** A ring in the top bar shows the 5-hour, weekly and monthly limits you set, and what fills the context window (system prompt, tools, MCP, skills, memory, messages). The composer can show an estimated cost before you send.
 

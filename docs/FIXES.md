@@ -39,6 +39,7 @@ Other bugs
 
 # Rename to CeloAgents
 - App name (`app_name`, share-sheet labels), icon labels, look name, mascot tab, onboarding, assistant persona, splash letters and `tools/connect-qr.sh` all say CeloAgents.
-- Package / applicationId (`app.ocmobile`) is unchanged, so installs and updates keep working.
+- (superseded by the package rename below)
 - Connection links use `celoagents://connect?...`; the old `cl0udly://` links are still accepted. The release APK is named `CeloAgents-<tag>.apk`.
 
+- Package / applicationId changed to `com.celoext` (was `app.ocmobile`): it installs as a new app, it does not update the old one.
