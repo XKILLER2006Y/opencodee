@@ -441,7 +441,7 @@ class OpenCodeApi(private val prefs: Prefs) {
             val methods = iObj.arr("methods")?.mapNotNull { mEl ->
                 val mObj = mEl as? JsonObject ?: return@mapNotNull null
                 AuthMethod(
-                    type = mObj.str("type") ?: "api",
+                    type = mObj.str("type") ?: "key",
                     label = mObj.str("label") ?: mObj.str("type") ?: "API key",
                 )
             }.orEmpty()

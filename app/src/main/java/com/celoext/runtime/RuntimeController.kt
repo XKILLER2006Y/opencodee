@@ -242,9 +242,17 @@ class RuntimeController(
     val serverAlive get() = process != null
 
     /** Something is still listening on the server port (a leftover `opencode serve` from an earlier run). */
-    fun portBusy(): Boolean = try {
-        java.net.Socket().use { s -> s.connect(java.net.InetSocketAddress("127.0.0.1", prefs.serverPort), 300); true }
-    } catch (e: Exception) { false }
+    fun portBusy(): Boolean {
+        val port = prefs.serverPort.toIntOrNull()?.takeIf { it in 1..65535 } ?: return false
+        return try {
+            java.net.Socket().use { socket ->
+                socket.connect(java.net.InetSocketAddress("127.0.0.1", port), 300)
+                true
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
 
     /**
      * `pkill -f opencode` inside Ubuntu, plus a sweep of whatever proot left behind on the phone.

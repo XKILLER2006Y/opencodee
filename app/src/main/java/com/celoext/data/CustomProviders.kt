@@ -65,9 +65,10 @@ object CustomProviders {
         val models = fetchModels(p, key)
         val block = JSONObject()
             .put("name", p.name)
-            .put("npm", "@ai-sdk/openai-compatible")
-            // the key in the provider block: this is what the AI SDK actually sends, no auth store needed
-            .put("options", JSONObject().put("baseURL", p.baseUrl).put("apiKey", key))
+            // OpenCode 2.x uses the native provider package and `settings`, not the V1 npm/options shape.
+            .put("package", "@opencode/ai/providers/openai-compatible")
+            // The compatible provider reads these package-specific settings when issuing requests.
+            .put("settings", JSONObject().put("baseURL", p.baseUrl).put("apiKey", key))
             .put("models", models)
         FreeModels.apply(p.id, block)
         // Also keep it in OpenCode's auth store, like any other provider. Some server versions don't know a
@@ -80,7 +81,12 @@ object CustomProviders {
     }
 
     private fun modelEntry(id: String, context: Int, output: Int) = JSONObject()
-        .put("name", id).put("tool_call", true).put("reasoning", false).put("attachment", false)
+        .put("name", id)
+        .put("capabilities", JSONObject()
+            .put("tools", true)
+            .put("input", org.json.JSONArray(listOf("text")))
+            .put("output", org.json.JSONArray(listOf("text")))
+            .put("reasoning", JSONObject().put("supported", false)))
         .put("limit", JSONObject().put("context", context).put("output", output))
 
     private fun fallback(p: Preset): JSONObject {

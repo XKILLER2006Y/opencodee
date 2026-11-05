@@ -43,3 +43,9 @@ Other bugs
 - Connection links use `celoagents://connect?...`; the old `cl0udly://` links are still accepted. The release APK is named `CeloAgents-<tag>.apk`.
 
 - Package / applicationId changed to `com.celoext` (was `app.ocmobile`): it installs as a new app, it does not update the old one.
+
+# OpenCode 2.x provider connection and config fixes
+- Provider integration methods report API-key authentication as `type: "key"`, not `"api"`. The provider sheet now routes `key` methods to `/api/integration/{id}/connect/key`; previously it treated them as OAuth, which explains why Google OAuth could work while API-key providers failed during Connect.
+- The API-key fallback method now uses the same `key` type, while `api` remains accepted for older server responses.
+- Custom OpenAI-compatible providers, Copilot and Pollinations now use the OpenCode 2.x `providers` config namespace, `package: "@opencode/ai/providers/openai-compatible"`, and `settings` instead of the retired V1 `npm/options` shape. Model capabilities use the V2 schema.
+- Runtime port probing now parses the stored string port as an integer before constructing `InetSocketAddress`, fixing the Kotlin compile failure.

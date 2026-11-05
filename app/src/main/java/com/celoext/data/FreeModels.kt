@@ -37,7 +37,12 @@ object FreeModels {
     }.getOrDefault(false)
 
     private fun model(name: String, context: Int, output: Int, tools: Boolean, reasoning: Boolean, images: Boolean) = JSONObject()
-        .put("name", name).put("tool_call", tools).put("reasoning", reasoning).put("attachment", images)
+        .put("name", name)
+        .put("capabilities", JSONObject()
+            .put("tools", tools)
+            .put("input", if (images) org.json.JSONArray(listOf("text", "image")) else org.json.JSONArray(listOf("text")))
+            .put("output", org.json.JSONArray(listOf("text")))
+            .put("reasoning", JSONObject().put("supported", reasoning)))
         .put("limit", JSONObject().put("context", context).put("output", output))
 
     private fun disabledList(): List<String> = runCatching {
@@ -51,8 +56,8 @@ object FreeModels {
         if (block == null) disabled.add(providerId)
         val patch = JSONObject().put("disabled_providers", org.json.JSONArray(disabled))
         if (block != null) {
+            // OpenCode 2.x global config uses the plural `providers` namespace.
             patch.put("providers", JSONObject().put(providerId, block))
-            patch.put("provider", JSONObject().put(providerId, block))
         }
         Graph.api.patchGlobalConfig(com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject)
     }
@@ -65,13 +70,14 @@ object FreeModels {
             COPILOT_ID,
             JSONObject()
                 .put("name", "GitHub Copilot")
-                .put("npm", "@ai-sdk/openai-compatible")
+                .put("package", "@opencode/ai/providers/openai-compatible")
                 .put(
-                    "options",
-                    JSONObject().put("baseURL", "https://api.githubcopilot.com").put("apiKey", token).put(
-                        "headers",
-                        JSONObject().put("Copilot-Integration-Id", "vscode-chat").put("Editor-Version", "vscode/1.107.0").put("User-Agent", "opencode-mobile"),
-                    ),
+                    "settings",
+                    JSONObject().put("baseURL", "https://api.githubcopilot.com").put("apiKey", token),
+                )
+                .put(
+                    "headers",
+                    JSONObject().put("Copilot-Integration-Id", "vscode-chat").put("Editor-Version", "vscode/1.107.0").put("User-Agent", "opencode-mobile"),
                 )
                 .put(
                     "models",
@@ -90,8 +96,8 @@ object FreeModels {
             POLLINATIONS_ID,
             JSONObject()
                 .put("name", "Pollinations (no account)")
-                .put("npm", "@ai-sdk/openai-compatible")
-                .put("options", JSONObject().put("baseURL", "https://text.pollinations.ai/openai").put("apiKey", "anonymous"))
+                .put("package", "@opencode/ai/providers/openai-compatible")
+                .put("settings", JSONObject().put("baseURL", "https://text.pollinations.ai/openai").put("apiKey", "anonymous"))
                 .put("models", JSONObject().put(POLLINATIONS_DEFAULT, model("GPT-OSS 20B", 131072, 8192, true, true, false))),
         )
         finish(POLLINATIONS_ID, POLLINATIONS_DEFAULT)

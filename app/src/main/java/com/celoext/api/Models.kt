@@ -164,7 +164,7 @@ data class AllProvider(val id: String, val name: String = "", val env: List<Stri
 data class AllProvidersResponse(val all: List<AllProvider> = emptyList(), val connected: List<String> = emptyList())
 
 @Serializable
-data class AuthMethod(val type: String = "api", val label: String = "")
+data class AuthMethod(val type: String = "key", val label: String = "")
 
 @Serializable
 data class AgentInfo(
