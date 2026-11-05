@@ -255,9 +255,11 @@ class RuntimeController(
     }
 
     /**
-     * `pkill -f opencode` inside Ubuntu, plus a sweep of whatever proot left behind on the phone.
-     * Destroying the process only kills the proot client: the guest `opencode serve` often survives,
-     * keeps the port and answers the health check, so a restart looks fine while the new server never binds.
+     * Stop leftover OpenCode processes inside the Ubuntu guest.
+     *
+     * Guest cleanup runs through pkill inside proot (or Root in root mode).
+     * The tracked proot client is stopped by requestStop(). Avoid desktop-JVM-only
+     * process enumeration APIs because they are unavailable on Android's runtime.
      * The pattern is written `[o]pencode` so it doesn't match this command's own line.
      */
     fun killLeftoverServer() {
@@ -269,15 +271,6 @@ class RuntimeController(
             if (!p.waitFor(8, TimeUnit.SECONDS)) p.destroyForcibly()
         }
         if (prefs.rootMode) runCatching { Root.run("pkill -f '[o]pencode'", 10) }
-        // the host side: the proot wrapper and the guest binary itself (same UID, so no root needed)
-        runCatching {
-            ProcessHandle.allProcesses().forEach { ph ->
-                val cmd = runCatching { ph.info().commandLine().orElse("") }.getOrDefault("")
-                if (cmd.contains("opencode") && !cmd.contains("pkill") && !cmd.contains("com.celoext")) {
-                    runCatching { ph.destroy() }
-                }
-            }
-        }
     }
 
     fun requestStop() {
