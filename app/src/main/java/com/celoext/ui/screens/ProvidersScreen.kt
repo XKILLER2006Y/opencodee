@@ -212,14 +212,20 @@ private fun KamihubSheet(onDone: () -> Unit) {
 
     OcSheet(onDone, p.name, skipHalf = false) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The model list is fetched with your key.", size = 14.sp, color = c.textDim)
+            Txt("OpenAI-compatible gateway at ${p.baseUrl}. The key is checked with a test message, then the model list is fetched.", size = 14.sp, color = c.textDim)
             Txt("API key", size = 16.sp, color = c.textDim)
             OcTextField(key, { key = it }, placeholder = "Paste key", password = true, mono = true)
-            Pill(if (busy) "Connecting…" else "Connect", {
+            Pill(if (busy) "Testing the key…" else "Connect", {
                 busy = true; error = null
                 scope.launch {
                     runCatching { com.celoext.data.CustomProviders.connect(p, key) }
-                        .onSuccess { n -> Graph.chats.toasts.tryEmit("${p.name} connected ($n models)"); onDone() }
+                        .onSuccess { r ->
+                            Graph.chats.toasts.tryEmit(
+                                if (r.warning == null) "${p.name} connected · ${r.model.substringAfterLast('/')}"
+                                else "${p.name} added, but ${r.warning}",
+                            )
+                            onDone()
+                        }
                         .onFailure { error = it.message ?: "Could not connect" }
                     busy = false
                 }

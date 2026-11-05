@@ -19,6 +19,8 @@ object CustomProviders {
         val name: String,
         val baseUrl: String,
         val exampleModel: String,
+        /** Tried first when picking the default model (the one known to answer on /chat/completions). */
+        val preferredModel: String = exampleModel,
         /** Registered when the gateway can't list its models (an outage, or /models returning 500). */
         val fallbackModels: List<Pair<String, Int>> = emptyList(),
     )
@@ -30,6 +32,7 @@ object CustomProviders {
         name = "Kamihub",
         baseUrl = "https://kamihub.us.ci/v1",
         exampleModel = "atmoro/alicn/deepseek-v4.1-flash",
+        preferredModel = "discovery/Atria-Dawn",
         fallbackModels = listOf(
             "atmoro/alicn/deepseek-v4.1-flash" to 128_000,
             "atmoro/atmo/deepseek-v4.1-flash" to 128_000,
@@ -58,11 +61,28 @@ object CustomProviders {
         ),
     )
 
-    /** Returns how many models were registered. Throws with a readable message when the key is refused or the gateway is unreachable. */
-    suspend fun connect(p: Preset, rawKey: String): Int = withContext(Dispatchers.IO) {
+    class Connected(val count: Int, val model: String, /** Non-null when no model answered a test message. */ val warning: String?)
+
+    /** Registers the provider and picks a model that really answers. Throws a readable message when the key is refused or the gateway is unreachable. */
+    suspend fun connect(p: Preset, rawKey: String): Connected = withContext(Dispatchers.IO) {
         val key = rawKey.trim()
         require(key.isNotEmpty() && key.none { it.isWhitespace() || it.isISOControl() }) { "The API key has spaces or line breaks in it" }
         val models = fetchModels(p, key)
+        // Same request as: curl {baseUrl}/chat/completions -H "Authorization: Bearer KEY" -d '{"model":...,"messages":[...]}'
+        // The list can contain ids that fail (the gateway answers 500 for some), so test a few and keep one that answers.
+        val ids = models.keys().asSequence().toList()
+        val candidates = (listOf(p.preferredModel, p.exampleModel) + ids).distinct().take(5)
+        var chosen: String? = null
+        var lastError: String? = null
+        for (id in candidates) {
+            val r = probeChat(p, key, id)
+            if (r == null) { chosen = id; break }
+            if (r.startsWith("refused")) error("${p.name} ${r}")
+            lastError = "$id: $r"
+        }
+        val model = chosen ?: p.preferredModel
+        // The chosen model must exist in the registered list even when /models didn't return it.
+        if (!models.has(model)) models.put(model, modelEntry(model, 128_000, 8192))
         val block = JSONObject()
             .put("name", p.name)
             // OpenCode 2.x uses the native provider package and `settings`, not the V1 npm/options shape.
@@ -76,10 +96,32 @@ object CustomProviders {
         runCatching { Graph.api.setApiKey(p.id, key) }
         runCatching { Graph.api.disposeAll() }
         runCatching { Graph.catalog.refresh() }
-        // Auto-select the first model so the user can start chatting immediately.
-        val firstModel = models.keys().asSequence().mapNotNull { models.optJSONObject(it)?.optString("name") }.firstOrNull() ?: p.exampleModel
-        FreeModels.finish(p.id, firstModel)
-        models.length()
+        FreeModels.finish(p.id, model)
+        Connected(models.length(), model, if (chosen == null) "No model answered a test message (${lastError.orEmpty().take(140)})" else null)
+    }
+
+    /** One tiny chat request. Returns null when the model answered, otherwise a short reason. */
+    private fun probeChat(p: Preset, key: String, model: String): String? {
+        val c = URL(p.baseUrl.trimEnd('/') + "/chat/completions").openConnection() as HttpURLConnection
+        return try {
+            c.requestMethod = "POST"; c.doOutput = true
+            c.connectTimeout = 15_000; c.readTimeout = 30_000
+            c.setRequestProperty("Authorization", "Bearer $key")
+            c.setRequestProperty("Content-Type", "application/json")
+            c.setRequestProperty("Accept", "application/json")
+            c.setRequestProperty("User-Agent", "opencode-mobile")
+            val body = JSONObject().put("model", model).put("max_tokens", 8)
+                .put("messages", org.json.JSONArray().put(JSONObject().put("role", "user").put("content", "halo"))).toString()
+            c.outputStream.use { it.write(body.toByteArray()) }
+            val code = c.responseCode
+            if (code in 200..299) return null
+            val text = runCatching { c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty() }.getOrDefault("").trim().replace(Regex("\\s+"), " ").take(120)
+            if (code == 401 || code == 403) "refused the API key (HTTP $code)" else "HTTP $code" + if (text.isBlank()) "" else " $text"
+        } catch (e: Exception) {
+            e.message ?: e.javaClass.simpleName
+        } finally {
+            c.disconnect()
+        }
     }
 
     private fun modelEntry(id: String, context: Int, output: Int) = JSONObject()
