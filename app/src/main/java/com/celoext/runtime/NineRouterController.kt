@@ -51,6 +51,11 @@ class NineRouterController(
          * The [x] brackets stop this script (and the proot that carries it) from matching itself.
          */
         private val KILL_SCRIPT = """
+            port=${'$'}1
+            if [ -n "${'$'}port" ]; then
+              command -v fuser >/dev/null 2>&1 && fuser -k -9 "${'$'}port/tcp" >/dev/null 2>&1
+              if command -v lsof >/dev/null 2>&1; then for q in ${'$'}(lsof -t -i tcp:"${'$'}port" 2>/dev/null); do kill -9 "${'$'}q" 2>/dev/null; done; fi
+            fi
             for sig in TERM KILL; do
               for d in /proc/[0-9]*; do
                 pid=${'$'}{d#/proc/}
@@ -222,6 +227,18 @@ class NineRouterController(
             while (isActive && portBusy() && waited < 8_000) { delay(250); waited += 250 }
             if (waited > 0) logLine("Waited ${waited}ms for port $port to be free")
             if (portBusy()) {
+                // Could not kill the holder. If it is a healthy 9Router (an instance from before), use it instead of fighting for the port.
+                val v = runCatching { healthVersionOrThrow() }.getOrNull()
+                if (v != null) {
+                    logLine("9Router is already running on port $port: using it")
+                    state.value = NineRouterState.Running(v)
+                    var bad = 0
+                    while (isActive && !stopRequested && bad < 3) {
+                        delay(5_000)
+                        bad = if (runCatching { healthVersionOrThrow() }.isSuccess) 0 else bad + 1
+                    }
+                    continue
+                }
                 logLine("Port $port is still in use by another process. Change the 9Router port in Settings, or stop whatever else is listening on it.")
                 state.value = NineRouterState.Crashed("Port $port is already in use")
                 delay(5_000)
@@ -306,7 +323,7 @@ class NineRouterController(
     fun killLeftover() {
         runCatching {
             val p = proot.processBuilder(
-                listOf("/bin/sh", "-c", KILL_SCRIPT),
+                listOf("/bin/sh", "-c", KILL_SCRIPT, "sh", port.toString()),
                 cwd = "/root",
             ).start()
             if (!p.waitFor(8, TimeUnit.SECONDS)) p.destroyForcibly()
