@@ -171,7 +171,10 @@ class OpenCodeApi(private val prefs: Prefs) {
             permission?.let { put("permissions", it) }
         }
         val res = call("POST", "/api/session", body = body)!!
-        val data = (res as? JsonObject)?.obj("data") ?: res as JsonObject
+        val root = res as JsonObject
+        // the session may sit under "data", "session" or at the top level, depending on the server version
+        val data = listOf(root.obj("data"), root.obj("session"), root).filterNotNull().firstOrNull { it.str("id")?.startsWith("ses") == true }
+            ?: throw ApiException(-1, "The server did not return a session id: ${root.toString().take(160)}")
         return parseSession(data)
     }
 

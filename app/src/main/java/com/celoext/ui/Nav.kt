@@ -59,9 +59,9 @@ class Nav {
     }
     fun root(r: Route) { direction = 0; stack.clear(); stack.add(r); NavMemory.save(stack) }
     /** Open a session from anywhere: the stack is Home → chat. */
-    fun openChat(id: String) { direction = 1; stack.clear(); stack.add(Route.Home); stack.add(Route.Chat(id)); NavMemory.save(stack) }
+    fun openChat(id: String) { if (!id.startsWith("ses")) return; direction = 1; stack.clear(); stack.add(Route.Home); stack.add(Route.Chat(id)); NavMemory.save(stack) }
     /** A switch without sliding: after the send animation the screen just "changes" to the chat. */
-    fun openChatInstant(id: String) { direction = 2; stack.clear(); stack.add(Route.Home); stack.add(Route.Chat(id)); NavMemory.save(stack) }
+    fun openChatInstant(id: String) { if (!id.startsWith("ses")) return; direction = 2; stack.clear(); stack.add(Route.Home); stack.add(Route.Chat(id)); NavMemory.save(stack) }
 }
 
 /**
@@ -118,7 +118,7 @@ object NavMemory {
         val raw = com.celoext.Graph.prefs.navStack
         val at = raw.substringBefore('|').toLongOrNull() ?: return null
         if (System.currentTimeMillis() - at > TTL) return null
-        raw.substringAfter('|').split(',').filter { it.isNotBlank() }.map { k -> if (k.startsWith("Chat:")) Route.Chat(k.removePrefix("Chat:")) else objects[k] ?: return null }
+        raw.substringAfter('|').split(',').filter { it.isNotBlank() }.map { k -> if (k.startsWith("Chat:")) Route.Chat(k.removePrefix("Chat:").also { id -> if (!id.startsWith("ses")) return null }) else objects[k] ?: return null }
             .takeIf { it.isNotEmpty() }
     }.getOrNull()
 
