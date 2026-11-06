@@ -61,6 +61,25 @@ object CustomProviders {
         ),
     )
 
+    /**
+     * The local 9Router gateway this app hosts in its own environment (Settings → 9Router).
+     * The base URL points at the loopback port the gateway listens on, so the key the user copies
+     * from the 9Router dashboard works like any other OpenAI-compatible key.
+     */
+    fun NINEROUTER(port: Int) = Preset(
+        id = "9router",
+        name = "9Router",
+        baseUrl = "http://127.0.0.1:$port/v1",
+        exampleModel = "kr/claude-sonnet-4.5",
+        preferredModel = "kr/claude-sonnet-4.5",
+        fallbackModels = listOf(
+            "kr/claude-sonnet-4.5" to 200_000,
+            "kr/glm-5" to 128_000,
+            "kr/claude-haiku-4.5" to 200_000,
+            "kr/MiniMax-M2.5" to 200_000,
+        ),
+    )
+
     class Connected(val count: Int, val model: String, /** Non-null when no model answered a test message. */ val warning: String?)
 
     /** Registers the provider and picks a model that really answers. Throws a readable message when the key is refused or the gateway is unreachable. */

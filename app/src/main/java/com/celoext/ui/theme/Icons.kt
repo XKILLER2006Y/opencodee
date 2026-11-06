@@ -70,6 +70,7 @@ object Ic {
     val Sparkle by lazy { icon("sparkle", "M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z") }
     val Download by lazy { icon("download", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "M7 10l5 5 5-5", "M12 15V3") }
     val Server by lazy { icon("server", "M4 3h16a1 1 0 0 1 1 1v6H3V4a1 1 0 0 1 1-1z", "M3 14h18v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z", "M7 7h.01", "M7 17h.01") }
+    val Router by lazy { icon("router", "M4 12h16M4 16h16M12 4v4M12 18v4M6.7 7.3a8 8 0 0 0 0 9.4M17.3 7.3a8 8 0 0 1 0 9.4") }
     val Key by lazy { icon("key", "M15 3a6 6 0 1 0 0 12a6 6 0 0 0 0-12z", "M10.8 13.2L3 21", "M7 17l2 2", "M5 19l2 2") }
     val Zap by lazy { icon("zap", "M13 2L3 14h8l-1 8 10-12h-8z") }
     val Stop by lazy { icon("stop", "M7 7h10v10H7z") }

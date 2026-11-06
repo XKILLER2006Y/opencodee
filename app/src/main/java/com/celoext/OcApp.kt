@@ -12,6 +12,7 @@ import com.celoext.data.Memory
 import com.celoext.data.Prefs
 import com.celoext.data.Scheduler
 import com.celoext.data.UsageTracker
+import com.celoext.runtime.NineRouterController
 import com.celoext.runtime.RuntimeController
 import com.celoext.runtime.RuntimePaths
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ object Graph {
     lateinit var prefs: Prefs
     lateinit var paths: RuntimePaths
     lateinit var runtime: RuntimeController
+    lateinit var ninerouter: NineRouterController
     lateinit var devices: Devices
     lateinit var api: OpenCodeApi
     lateinit var events: EventHub
@@ -52,6 +54,7 @@ object Graph {
         devices = Devices(prefs)
         api = OpenCodeApi(prefs)
         runtime = RuntimeController(a, paths, prefs, api)
+        ninerouter = NineRouterController(a, paths, prefs)
         // people who used the app before the welcome screen existed don't see it again
         if (!prefs.onboarded && paths.rootfsReady && prefs.loginSeen) prefs.onboarded = true
         events = EventHub(api, runtime)
