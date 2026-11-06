@@ -61,15 +61,30 @@ object FreeModels {
         }
         val jsonPatch = com.celoext.api.OcJson.parseToJsonElement(patch.toString()) as kotlinx.serialization.json.JsonObject
         try {
-            Graph.api.patchGlobalConfig(jsonPatch)
+            try {
+                Graph.api.patchGlobalConfig(jsonPatch)
+            } catch (first: Exception) {
+                // "HTTP 500" from the server and EACCES on the file: the config file or its folder has no write bit
+                // (seen after a restore/extract). Fix the modes from inside the environment and try the server once more.
+                if (Graph.devices.isRemote || !fixConfigPerms()) throw first
+                Graph.api.patchGlobalConfig(jsonPatch)
+            }
         } catch (e: Exception) {
             // The server's config write answered an error (a bare "HTTP 500" with Kamihub). The config is a plain
             // JSON(C) file in the environment, so merge the block into it directly and let the server reload it.
-            val why = if (Graph.devices.isRemote) "remote device" else mergeIntoFile(patch)
+            val why = if (Graph.devices.isRemote) "remote device" else (mergeIntoFile(patch)?.let { fixConfigPerms(); mergeIntoFile(patch) })
             if (why != null) throw IllegalStateException("Saving the provider config failed: ${e.message ?: e.javaClass.simpleName} (file fallback: $why)")
             runCatching { Graph.api.disposeAll() }
         }
     }
+
+    /** chmod u+rwX on the config folder and its files, as the environment's root. True when the command ran. */
+    private suspend fun fixConfigPerms(): Boolean = runCatching {
+        Graph.runtime.runGuest(
+            listOf("/bin/bash", "-c", "mkdir -p /root/.config/opencode /root/.local/share/opencode; chmod -R u+rwX /root/.config/opencode /root/.local/share/opencode; true"),
+            timeoutSec = 30,
+        ) == 0
+    }.getOrDefault(false)
 
     /** Drops line and block comments (outside strings) and trailing commas so a .jsonc file can be parsed. */
     private fun stripJsonc(src: String): String {
