@@ -42,7 +42,7 @@ class ChatLocalBubblesTest {
             seenUntil = 1_200,
         )
         assertEquals(1, keep.size)
-        assertEquals(5_000, keep[0].info.time.created)
+        assertEquals(5_000L, keep[0].info.time.created)
     }
 
     @Test fun oneStoredMessageConfirmsOneBubble() {
@@ -52,7 +52,7 @@ class ChatLocalBubblesTest {
             seenUntil = 0,
         )
         assertEquals(1, keep.size)
-        assertEquals(1_100, keep[0].info.time.created)
+        assertEquals(1_100L, keep[0].info.time.created)
     }
 
     @Test fun assistantMessagesNeverConfirmAUserBubble() {
