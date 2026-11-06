@@ -58,7 +58,6 @@ fun NineRouterScreen(nav: Nav) {
     val prefs = Graph.prefs
     var showLog by remember { mutableStateOf(false) }
     var installing by remember { mutableStateOf(false) }
-    var installError by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize().screenBackdrop("NineRouterScreen1")) {
         TopBar("9Router", left = { com.celoext.ui.components.IconBtn(Ic.Back, { nav.pop() }) })
@@ -67,28 +66,33 @@ fun NineRouterScreen(nav: Nav) {
                 val (label, color) = when (val s = st) {
                     is NineRouterState.Running -> "Running · ${s.version}" to c.ok
                     is NineRouterState.Starting -> "Starting…" to c.warn
-                    is NineRouterState.Installing -> s.step to c.warn
+                    is NineRouterState.Installing -> s.step + (s.progress?.let { p -> " · ${(p * 100).toInt()}%" } ?: "") to c.warn
                     is NineRouterState.Crashed -> s.message to c.danger
                     NineRouterState.NotInstalled -> "Not installed" to c.textDim
                     NineRouterState.Stopped -> "Stopped" to c.textDim
                 }
                 Txt(label, size = 19.sp, color = color)
+                (st as? NineRouterState.Installing)?.takeIf { it.detail.isNotBlank() }?.let {
+                    Txt(it.detail, size = 14.sp, color = c.textDim, modifier = Modifier.padding(top = 4.dp))
+                }
                 Txt("AI gateway · 127.0.0.1:${nr.port}", size = 15.sp, color = c.textDim, modifier = Modifier.padding(top = 4.dp))
                 Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    when (st) {
-                        NineRouterState.NotInstalled -> if (!installing) SmallButton("Install", {
-                            installing = true; installError = null
+                    when {
+                        st is NineRouterState.Installing || installing -> SmallButton("Installing…", {})
+                        !nr.installed() -> SmallButton("Install", {
+                            installing = true
                             scope.launch {
                                 val ok = nr.install()
                                 installing = false
                                 if (ok) nr.startServer()
-                                else installError = "Installation failed — open the log for details"
                             }
-                        }, filled = true) else SmallButton("Installing…", {})
-                        is NineRouterState.Installing -> SmallButton("Installing…", {})
+                        }, filled = true)
+                        st is NineRouterState.Running || st is NineRouterState.Starting -> {
+                            SmallButton("Stop", { nr.stopServer() }, danger = true)
+                            SmallButton("Restart", { nr.restartServer() })
+                        }
                         else -> {
-                            if (st is NineRouterState.Running || st is NineRouterState.Starting) SmallButton("Stop", { nr.stopServer() }, danger = true)
-                            else SmallButton("Start", { nr.startServer() }, filled = true)
+                            SmallButton("Start", { nr.startServer() }, filled = true)
                             SmallButton("Restart", { nr.restartServer() })
                         }
                     }
@@ -96,7 +100,6 @@ fun NineRouterScreen(nav: Nav) {
                     if (st is NineRouterState.Running) SmallButton("Dashboard", { nav.push(com.celoext.ui.Route.Preview(nr.dashboardUrl, null)) }, filled = true)
                 }
                 if (installing) Row(Modifier.padding(top = 14.dp)) { Spinner(22.dp) }
-                installError?.let { Txt(it, size = 15.sp, color = c.danger, modifier = Modifier.padding(top = 12.dp)) }
             }
 
             Spacer(Modifier.height(16.dp))

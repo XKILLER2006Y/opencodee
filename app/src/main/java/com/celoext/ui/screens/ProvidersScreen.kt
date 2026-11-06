@@ -255,11 +255,17 @@ private fun NineRouterSheet(nav: Nav, onDone: () -> Unit) {
                 "Local gateway at ${p.baseUrl}. Get an API key from its dashboard (Endpoint → API keys); the key is checked with a test message, then the model list is fetched.",
                 size = 14.sp, color = c.textDim, lineHeight = 20.sp,
             )
-            when (st) {
-                is com.celoext.runtime.NineRouterState.Running -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            when {
+                st is com.celoext.runtime.NineRouterState.Running -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     SmallButton("Open dashboard", { nav.push(com.celoext.ui.Route.Preview(nr.dashboardUrl, null)) }, filled = true)
                 }
-                com.celoext.runtime.NineRouterState.NotInstalled, is com.celoext.runtime.NineRouterState.Installing -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                st is com.celoext.runtime.NineRouterState.Installing -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt((st as com.celoext.runtime.NineRouterState.Installing).step + "…", size = 15.sp, color = c.warn)
+                }
+                st is com.celoext.runtime.NineRouterState.Starting -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Txt("Starting 9Router…", size = 15.sp, color = c.warn)
+                }
+                !nr.installed() -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Txt("The 9Router server isn't installed yet.", size = 15.sp, color = c.warn)
                     SmallButton("Install", {
                         scope.launch {
@@ -269,7 +275,10 @@ private fun NineRouterSheet(nav: Nav, onDone: () -> Unit) {
                     }, filled = true)
                 }
                 else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Txt("The 9Router server is not running.", size = 15.sp, color = c.warn)
+                    Txt(
+                        (st as? com.celoext.runtime.NineRouterState.Crashed)?.message ?: "The 9Router server is not running.",
+                        size = 15.sp, color = c.warn,
+                    )
                     SmallButton("Start", { nr.startServer() }, filled = true)
                 }
             }
