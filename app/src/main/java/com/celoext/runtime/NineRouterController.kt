@@ -313,7 +313,13 @@ class NineRouterController(
             return
         }
         userStopped = false
-        ContextCompat.startForegroundService(app, Intent(app, NineRouterService::class.java).setAction(NineRouterService.ACTION_START))
+        try {
+            ContextCompat.startForegroundService(app, Intent(app, NineRouterService::class.java).setAction(NineRouterService.ACTION_START))
+        } catch (e: Throwable) {
+            // A missing manifest entry or a blocked foreground service used to fail silently.
+            logLine("Could not start the 9Router service: ${e.message}")
+            state.value = NineRouterState.Crashed(e.message ?: "Could not start the 9Router service")
+        }
     }
 
     fun stopServer() {

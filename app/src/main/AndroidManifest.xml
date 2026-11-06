@@ -83,6 +83,10 @@
             android:name=".runtime.ServerService"
             android:exported="false" />
 
+        <service
+            android:name=".runtime.NineRouterService"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
