@@ -12,6 +12,8 @@ import com.celoext.api.Part
 import com.celoext.api.arr
 import com.celoext.api.obj
 import com.celoext.api.str
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
 class ChatMessage(val id: String, info: MessageInfo) {
@@ -90,7 +92,8 @@ class Chat(val id: String, private val api: OpenCodeApi) {
         val seq = ++loadSeq
         val rev = eventRevision
         try {
-            val list = api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT)
+            // Parsing up to 200 messages with their tool output is hundreds of KB of JSON: keep it off the UI thread.
+            val list = withContext(Dispatchers.IO) { api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT) }
             // A newer load started while this one was in flight: its snapshot is fresher.
             if (seq != loadSeq) return
             val fresh = list.map { m -> ChatMessage(m.info.id, m.info).also { it.parts.addAll(m.parts) } }
@@ -110,12 +113,22 @@ class Chat(val id: String, private val api: OpenCodeApi) {
             initialIds.clear(); initialIds.addAll(fresh.map { it.id })
             live = true
             loadError = null
-            if (seq == loadSeq) runCatching { api.todos(id, directory) }.getOrNull()?.let { todos = parseTodos(it) }
+            // The todo list is the metadata of the last todowrite part, which is already in this snapshot:
+            // fetching it again meant a second request for 100 messages on every reload.
+            latestTodos(fresh)?.let { todos = parseTodos(it) }
         } catch (e: Exception) {
             if (seq == loadSeq) loadError = e.message ?: "Could not load the chat"
         } finally {
             if (seq == loadSeq) loading = false
         }
+    }
+
+    /** The newest todowrite result in [list], if any. */
+    private fun latestTodos(list: List<ChatMessage>): kotlinx.serialization.json.JsonArray? {
+        for (m in list.asReversed()) for (p in m.parts.asReversed()) {
+            if (p.raw.str("tool") == "todowrite") p.raw.obj("state")?.obj("metadata")?.arr("todos")?.let { return it }
+        }
+        return null
     }
 
     private val pending = LinkedHashMap<Pair<String, String>, StringBuilder>()

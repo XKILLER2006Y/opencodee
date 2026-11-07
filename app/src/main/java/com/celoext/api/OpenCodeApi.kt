@@ -236,19 +236,6 @@ class OpenCodeApi(private val prefs: Prefs) {
         return parseMessages(res, defaultSessionID = id)
     }
 
-    suspend fun todos(id: String, directory: String?): JsonArray {
-        val msgs = runCatching { messages(id, directory, limit = 100) }.getOrDefault(emptyList())
-        for (m in msgs.asReversed()) {
-            for (p in m.parts.asReversed()) {
-                if (p.raw.str("tool") == "todowrite") {
-                    val arr = p.raw.obj("state")?.obj("metadata")?.arr("todos")
-                    if (arr != null) return arr
-                }
-            }
-        }
-        return JsonArray(emptyList())
-    }
-
     suspend fun diff(id: String, directory: String?): JsonArray {
         val res = call("GET", "/api/session/$id/diff", loc(directory))
         return (res as? JsonObject)?.arr("data") ?: res as? JsonArray ?: JsonArray(emptyList())
