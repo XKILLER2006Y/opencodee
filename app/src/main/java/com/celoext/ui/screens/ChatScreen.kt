@@ -320,7 +320,14 @@ fun ChatScreen(id: String, nav: Nav, onMenu: () -> Unit) {
                             state.clear(); stick = true; editing = null; sendingNow = true
                             scope.launch {
                                 runCatching { if (e != null) hub.edit(ctx, id, e, text, atts) else hub.send(ctx, id, text, atts) }
-                                    .onFailure { hub.toasts.tryEmit(it.message ?: "Send failed") }
+                                    .onFailure {
+                                        // A failed send must not eat the text: put it back for a retry.
+                                        if (state.text.isBlank() && state.attachments.isEmpty()) {
+                                            state.text = text
+                                            state.attachments.addAll(atts)
+                                        }
+                                        hub.toasts.tryEmit(it.message ?: "Send failed")
+                                    }
                                 sendingNow = false
                             }
                         },
