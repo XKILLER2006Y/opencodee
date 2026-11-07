@@ -3,7 +3,7 @@ package com.celoext
 import com.celoext.api.MessageInfo
 import com.celoext.api.MessageWithParts
 import com.celoext.api.TimeInfo
-import com.celoext.data.inChatOrder
+import com.celoext.api.inChatOrder
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
