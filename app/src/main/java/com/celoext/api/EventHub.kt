@@ -351,6 +351,15 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                     }
                 }))
             }
+            "session.execution.started", "session.execution.succeeded",
+            "session.execution.failed", "session.execution.interrupted" -> {
+                val sid = data.str("sessionID") ?: return
+                val type = executionStatus(rawType) ?: return
+                events.tryEmit(Event(dir, "session.status", buildJsonObject {
+                    put("sessionID", sid)
+                    putJsonObject("status") { put("type", type) }
+                }))
+            }
             "session.status" -> events.tryEmit(Event(dir, "session.status", data))
             "session.idle" -> events.tryEmit(Event(dir, "session.idle", data))
             "permission.asked" -> {
@@ -432,4 +441,15 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
     }
 
     private fun JsonArray?.orEmpty() = this ?: JsonArray(emptyList())
+}
+
+/**
+ * OpenCode 2.2.5 reports a run through the execution lifecycle and no longer sends
+ * `session.status` for a normal prompt. Without this mapping the app never learns that a session
+ * is busy, so it shows no stop button and sends no "reply finished" notification.
+ */
+internal fun executionStatus(rawType: String): String? = when (rawType) {
+    "session.execution.started" -> "busy"
+    "session.execution.succeeded", "session.execution.failed", "session.execution.interrupted" -> "idle"
+    else -> null
 }
