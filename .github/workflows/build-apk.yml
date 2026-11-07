@@ -3,6 +3,7 @@ name: Build APK
 # Temporary, fork-only helper: builds a signed release APK as an artifact without
 # publishing a GitHub release. Not part of any pull request.
 on:
+  push:
   workflow_dispatch:
 
 permissions:
