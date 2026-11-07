@@ -107,6 +107,9 @@ class Chat(val id: String, private val api: OpenCodeApi) {
                 messages.clear()
                 messages.addAll(fresh)
             }
+            // The merge branch above cannot clear the list, so a local bubble that this snapshot has
+            // confirmed would stay next to its stored copy. Drop every local that is no longer pending.
+            dropConfirmedLocals(messages, keep)
             // a message we showed right away and the server hasn't returned yet must not blink and vanish
             keep.forEach { l -> if (messages.none { it.id == l.id }) insert(l) }
             newestUserAt = maxOf(newestUserAt, fresh.filter { it.info.isUser }.maxOfOrNull { it.info.time.created } ?: 0L)
@@ -219,6 +222,15 @@ class Chat(val id: String, private val api: OpenCodeApi) {
         val o = it as? JsonObject ?: return@mapNotNull null
         Todo(o.str("content") ?: "", o.str("status") ?: "pending", o.str("priority") ?: "medium")
     }
+}
+
+/**
+ * Removes the local bubbles that [keep] does not list, meaning the server has stored them.
+ * Needed when a load merges with live events instead of replacing the list.
+ */
+internal fun dropConfirmedLocals(messages: MutableList<ChatMessage>, keep: List<ChatMessage>) {
+    val keepIds = keep.mapTo(HashSet()) { it.id }
+    messages.removeAll { it.id.startsWith(LOCAL_PREFIX) && it.id !in keepIds }
 }
 
 /**
