@@ -6,9 +6,10 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * OpenCode 2.2.5 announces a run with session.execution.* and sends no session.status for a
- * normal prompt. The app has to translate the execution lifecycle itself, otherwise the chat
- * never shows the stop button and never sends the "reply finished" notification.
+ * OpenCode 2.2.5 announces a run with session.execution.* and sends no session.status or
+ * session.idle for a normal prompt. The app has to translate the execution lifecycle itself,
+ * otherwise the chat never shows the stop button, never sends the "reply finished" notification
+ * and never reloads after a run to confirm the sent message.
  */
 class EventHubExecutionStatusTest {
     @Test fun startedMeansBusy() {

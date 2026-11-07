@@ -354,11 +354,15 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             "session.execution.started", "session.execution.succeeded",
             "session.execution.failed", "session.execution.interrupted" -> {
                 val sid = data.str("sessionID") ?: return
-                val type = executionStatus(rawType) ?: return
-                events.tryEmit(Event(dir, "session.status", buildJsonObject {
-                    put("sessionID", sid)
-                    putJsonObject("status") { put("type", type) }
-                }))
+                when (executionStatus(rawType)) {
+                    "busy" -> events.tryEmit(Event(dir, "session.status", buildJsonObject {
+                        put("sessionID", sid)
+                        putJsonObject("status") { put("type", "busy") }
+                    }))
+                    // ChatHub's idle handling clears the status, sends the notification and reloads the
+                    // open chat, which also confirms the local bubble and picks up the stored message ids.
+                    "idle" -> events.tryEmit(Event(dir, "session.idle", buildJsonObject { put("sessionID", sid) }))
+                }
             }
             "session.status" -> events.tryEmit(Event(dir, "session.status", data))
             "session.idle" -> events.tryEmit(Event(dir, "session.idle", data))
@@ -445,8 +449,9 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
 
 /**
  * OpenCode 2.2.5 reports a run through the execution lifecycle and no longer sends
- * `session.status` for a normal prompt. Without this mapping the app never learns that a session
- * is busy, so it shows no stop button and sends no "reply finished" notification.
+ * `session.status` or `session.idle` for a normal prompt. Without this mapping the app never
+ * learns that a session is busy, so it shows no stop button, sends no "reply finished"
+ * notification and never reloads the chat to confirm the sent message.
  */
 internal fun executionStatus(rawType: String): String? = when (rawType) {
     "session.execution.started" -> "busy"
