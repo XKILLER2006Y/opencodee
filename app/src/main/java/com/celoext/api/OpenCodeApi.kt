@@ -233,7 +233,7 @@ class OpenCodeApi(private val prefs: Prefs) {
     suspend fun messages(id: String, directory: String?, limit: Int = MAX_LIMIT): List<MessageWithParts> {
         val res = call("GET", "/api/session/$id/message", loc(directory) + mapOf("limit" to pageLimit(limit).toString()))
             ?: JsonArray(emptyList())
-        return parseMessages(res, defaultSessionID = id)
+        return inChatOrder(parseMessages(res, defaultSessionID = id))
     }
 
     suspend fun diff(id: String, directory: String?): JsonArray {
