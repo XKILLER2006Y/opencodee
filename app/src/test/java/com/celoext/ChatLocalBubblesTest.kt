@@ -5,6 +5,7 @@ import com.celoext.api.Part
 import com.celoext.api.TimeInfo
 import com.celoext.data.ChatMessage
 import com.celoext.data.LOCAL_PREFIX
+import com.celoext.data.dropConfirmedLocals
 import com.celoext.data.unconfirmedLocals
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -71,6 +72,28 @@ class ChatLocalBubblesTest {
             seenUntil = 0,
         )
         assertEquals(1, keep.size)
+    }
+
+    @Test fun mergedSnapshotDropsTheConfirmedBubble() {
+        // A load that races with live events merges instead of replacing the list: the bubble the
+        // snapshot has confirmed must still be removed, or the same message shows twice.
+        val first = local(1_000, "first")
+        val second = local(3_000, "second")
+        val current = mutableListOf(first, stored("msg_1", 1_100), second)
+
+        dropConfirmedLocals(current, keep = listOf(second))
+
+        assertEquals(listOf("msg_1", second.id), current.map { it.id })
+    }
+
+    @Test fun mergedSnapshotKeepsPendingBubbles() {
+        val first = local(1_000, "first")
+        val second = local(3_000, "second")
+        val current = mutableListOf(first, stored("msg_1", 1_100), second)
+
+        dropConfirmedLocals(current, keep = listOf(first, second))
+
+        assertEquals(listOf(first.id, "msg_1", second.id), current.map { it.id })
     }
 
     @Test fun alreadySeenMessageDoesNotConfirmAgain() {
