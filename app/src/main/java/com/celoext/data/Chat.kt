@@ -93,7 +93,9 @@ class Chat(val id: String, private val api: OpenCodeApi) {
         val rev = eventRevision
         try {
             // Parsing up to 200 messages with their tool output is hundreds of KB of JSON: keep it off the UI thread.
-            val list = withContext(Dispatchers.IO) { api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT) }
+            val list = withContext(Dispatchers.IO) {
+                inChatOrder(api.messages(id, directory, com.celoext.api.OpenCodeApi.MAX_LIMIT))
+            }
             // A newer load started while this one was in flight: its snapshot is fresher.
             if (seq != loadSeq) return
             val fresh = list.map { m -> ChatMessage(m.info.id, m.info).also { it.parts.addAll(m.parts) } }
@@ -223,6 +225,14 @@ class Chat(val id: String, private val api: OpenCodeApi) {
         Todo(o.str("content") ?: "", o.str("status") ?: "pending", o.str("priority") ?: "medium")
     }
 }
+
+/**
+ * The server lists a session's messages newest first: it returns the latest page in reverse
+ * order. The chat keeps them oldest first, because the composer sits at the bottom and
+ * [Chat.insert] relies on ascending ids for live events.
+ */
+internal fun inChatOrder(list: List<MessageWithParts>): List<MessageWithParts> =
+    list.sortedWith(compareBy({ it.info.time.created }, { it.info.id }))
 
 /**
  * Removes the local bubbles that [keep] does not list, meaning the server has stored them.
