@@ -65,7 +65,7 @@ object Downloader {
             onProgress(from, total)
             var done = from
             var last = from
-            part.outputStream(append = resumed).buffered(1 shl 16).use { out ->
+            java.io.FileOutputStream(part, resumed).buffered(1 shl 16).use { out ->
                 val buf = ByteArray(1 shl 16)
                 val src = body.byteStream()
                 while (true) {
