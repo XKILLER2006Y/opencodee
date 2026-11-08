@@ -359,9 +359,14 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
         Graph.scope.launch {
             delay(400)
             val msg = chats[id]?.messages?.lastOrNull { !it.info.isUser }
-            val text = msg?.parts?.filter { it.type == "text" }?.joinToString(" ") { it.text }?.replace(Regex("[`*#>_]"), "")?.trim()
-                ?.takeIf { it.isNotBlank() } ?: msg?.info?.errorMessage ?: "The task is done"
-            val title = session(id)?.displayTitle?.ifBlank { null } ?: "OpenCode"
+            val reply = msg?.parts?.filter { it.type == "text" }?.joinToString(" ") { it.text }?.replace(Regex("[`*#>_]"), "")?.trim()
+                ?.takeIf { it.isNotBlank() }
+            val note = finishNote(
+                reply = reply,
+                error = msg?.info?.errorMessage,
+                completed = msg == null || msg.info.time.completed != null,
+                sessionTitle = session(id)?.displayTitle,
+            )
             runCatching {
                 val nm = ctx.getSystemService(android.app.NotificationManager::class.java)
                 if (nm.getNotificationChannel("replies") == null) nm.createNotificationChannel(android.app.NotificationChannel("replies", "Replies", android.app.NotificationManager.IMPORTANCE_DEFAULT))
@@ -370,8 +375,9 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                     android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT,
                 )
                 nm.notify(id.hashCode(), android.app.Notification.Builder(ctx, "replies")
-                    .setSmallIcon(com.celoext.R.drawable.ic_stat).setContentTitle(title).setContentText(text.take(160))
-                    .setStyle(android.app.Notification.BigTextStyle().bigText(text.take(600)))
+                    .setSmallIcon(com.celoext.R.drawable.ic_stat).setContentTitle(note.title).setContentText(note.text.take(160))
+                    .setSubText(note.sessionTitle)
+                    .setStyle(android.app.Notification.BigTextStyle().bigText(note.text.take(600)))
                     .setContentIntent(open).setAutoCancel(true).build())
             }
         }
@@ -405,6 +411,23 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
 }
 
 data class RetryInfo(val message: String, val label: String?, val link: String?, val title: String?, val nextAt: Long? = null)
+
+/** Title and body of the notification shown when a background run ends. */
+internal data class FinishNote(val title: String, val text: String, val sessionTitle: String?)
+
+internal fun finishNote(reply: String?, error: String?, completed: Boolean, sessionTitle: String?): FinishNote {
+    val title = when {
+        error != null -> "OpenCode hit an error"
+        !completed -> "OpenCode stopped"
+        else -> sessionTitle?.ifBlank { null } ?: "OpenCode"
+    }
+    val text = when {
+        error != null -> error
+        !completed -> "The reply was cut off before it finished. Tap to review."
+        else -> reply ?: "The task is done"
+    }
+    return FinishNote(title, text, sessionTitle?.takeIf { it.isNotBlank() })
+}
 
 data class Attachment(val uri: Uri, val mime: String, val name: String) {
     val isImage get() = mime.startsWith("image/")
