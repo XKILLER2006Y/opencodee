@@ -89,11 +89,18 @@ object CustomProviders {
         val candidates = (listOf(p.preferredModel, p.exampleModel) + ids).distinct().take(5)
         var chosen: String? = null
         var lastError: String? = null
+        var forbidden = 0
         for (id in candidates) {
             val r = probeChat(p, key, id)
             if (r == null) { chosen = id; break }
-            if (r.startsWith("refused")) error("${p.name} ${r}")
+            // A wrong key must stop here. But 403 ("this model is not allowed for the key") only
+            // rules out one model: keep probing the rest, the gateway may allow others.
+            if (r.startsWith("unauthorized")) error("${p.name} refused the API key (HTTP 401)")
+            if (r.startsWith("forbidden")) forbidden++
             lastError = "$id: $r"
+        }
+        if (chosen == null && forbidden == candidates.size) {
+            error("${p.name}: none of the candidate models is allowed for this key (HTTP 403). Check the model allowlist of the key in its dashboard.")
         }
         val model = chosen ?: p.preferredModel
         // The chosen model must exist in the registered list even when /models didn't return it.
@@ -131,7 +138,14 @@ object CustomProviders {
             val code = c.responseCode
             if (code in 200..299) return null
             val text = runCatching { c.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty() }.getOrDefault("").trim().replace(Regex("\\s+"), " ").take(120)
-            if (code == 401 || code == 403) "refused the API key (HTTP $code)" else "HTTP $code" + if (text.isBlank()) "" else " $text"
+            // 401 means the key itself is wrong; 403 usually means the key is valid but this
+            // model is not on its allowlist (Kamihub: "Model ... tidak diizinkan untuk API key ini"),
+            // so the caller can still try the other candidates.
+            when (code) {
+                401 -> return "unauthorized (HTTP 401)"
+                403 -> return "forbidden (HTTP 403)" + if (text.isBlank()) "" else ": $text"
+                else -> return "HTTP $code" + if (text.isBlank()) "" else " $text"
+            }
         } catch (e: Exception) {
             e.message ?: e.javaClass.simpleName
         } finally {

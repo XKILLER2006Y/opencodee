@@ -343,9 +343,17 @@ class OpenCodeApi(private val prefs: Prefs) {
     }
 
     suspend fun replyQuestion(requestId: String, directory: String?, answers: List<List<String>>, sessionId: String? = null) {
-        val form = formCache[requestId]
+        // The form usually arrives over SSE (question.asked) and is then never fetched, so the
+        // cache can be empty here. GET /api/form fills it; without the fields the answer would be
+        // an empty object, which the server accepts (204) and the agent sees as "no answer".
+        var form = formCache[requestId]
+        if (form == null) {
+            runCatching { questions(directory) }
+            form = formCache[requestId]
+        }
         val sid = sessionId ?: form?.str("sessionID") ?: return
         val fields = form?.arr("fields").orEmpty()
+        if (fields.isEmpty()) throw ApiException(404, "The question is no longer open")
         val answerMap = buildJsonObject {
             fields.forEachIndexed { idx, fEl ->
                 val f = fEl as? JsonObject ?: return@forEachIndexed
@@ -354,7 +362,8 @@ class OpenCodeApi(private val prefs: Prefs) {
                 val given = answers.getOrNull(idx).orEmpty()
                 when (type) {
                     "multiselect" -> putJsonArray(key) { given.forEach { add(JsonPrimitive(it)) } }
-                    "boolean" -> put(key, given.firstOrNull() == "true")
+                    // The panel collects free text for booleans too: accept the usual spellings.
+                    "boolean" -> put(key, given.firstOrNull()?.let { it.equals("true", true) || it.equals("yes", true) || it.equals("ya", true) || it == "1" } ?: false)
                     "number", "integer" -> put(key, given.firstOrNull()?.toDoubleOrNull() ?: 0)
                     else -> put(key, given.firstOrNull() ?: "")
                 }
@@ -363,6 +372,12 @@ class OpenCodeApi(private val prefs: Prefs) {
         call("POST", "/api/session/$sid/form/$requestId/reply", loc(directory), buildJsonObject {
             put("answer", answerMap)
         })
+    }
+
+    /** Remembers the raw form JSON behind a `question.asked` event, so replyQuestion can map the answers onto the field keys. */
+    fun cacheForm(form: JsonObject) {
+        val id = form.str("id") ?: return
+        if (id.startsWith("frm_")) formCache[id] = form
     }
 
     suspend fun rejectQuestion(requestId: String, directory: String?, sessionId: String? = null) {
