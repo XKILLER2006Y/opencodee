@@ -16,18 +16,23 @@ object TarExtractor {
     class Result(val files: Int, val skipped: Int)
 
     fun extract(archive: File, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): Result {
+        return extract(java.util.zip.GZIPInputStream(java.io.FileInputStream(archive).buffered(1 shl 16), 1 shl 16), archive.length(), dest, onProgress)
+    }
+
+    /** Same layout rules as [extract], but the caller supplies the (already decompressed) tar stream. */
+    fun extract(input: java.io.InputStream, total: Long, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): Result {
         dest.mkdirs()
         val destCanon = dest.canonicalFile
         // "/a/rootfs-evil" must not count as inside "/a/rootfs": compare with a trailing separator
         fun inside(f: File): Boolean = f.canonicalFile.path.let { it == destCanon.path || it.startsWith(destCanon.path + File.separator) }
-        val total = archive.length()
-        val counting = CountingStream(FileInputStream(archive).buffered(1 shl 16))
+        val counting = CountingStream(input)
         val dirModes = ArrayList<Pair<File, Int>>()
         var files = 0
         var skipped = 0
         var lastReport = 0L
 
-        GZIPInputStream(counting, 1 shl 16).use { gz ->
+        val gz = counting
+        run {
             val hdr = ByteArray(512)
             var longName: String? = null
             var longLink: String? = null

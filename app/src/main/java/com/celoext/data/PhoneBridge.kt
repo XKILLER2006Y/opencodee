@@ -345,8 +345,11 @@ object PhoneBridge {
         val shot = withTimeoutOrNull(180_000) { d.await() } ?: error("No photo was taken.")
         val name = "photo-" + SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date()) + ".jpg"
         val dest = File(Graph.paths.host(dir), name).apply { parentFile?.mkdirs() }
-        shot.copyTo(dest, overwrite = true); shot.delete()
-        return "Saved ${dir.trimEnd('/')}/$name"
+        // A save folder outside the app sandbox (an OEM-blocked storage area) can throw EACCES: chmod through su, then retry.
+        com.celoext.runtime.Root.withRetry(dest) { shot.copyTo(dest, overwrite = true) }
+        shot.delete()
+        // The native agent can't see /root: report the path in its own view.
+        return "Saved ${com.celoext.Graph.paths.serverPath(dir.trimEnd('/'))}/$name"
     }
 
     private fun saveToDownloads(guest: String): String {

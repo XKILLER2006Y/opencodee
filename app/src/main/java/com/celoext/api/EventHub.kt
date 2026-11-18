@@ -85,7 +85,9 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
     private fun dispatch(json: String) {
         val o = runCatching { OcJson.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return
         val rawType = o.str("type") ?: o.obj("payload")?.str("type") ?: return
-        val dir = o.obj("location")?.str("directory") ?: o.str("directory")
+        val dir = (o.obj("location")?.str("directory") ?: o.str("directory"))?.let { p ->
+            runCatching { Graph.paths.clientPath(p) }.getOrDefault(p)
+        }
         val data = o.obj("data") ?: o.obj("payload")?.obj("properties") ?: o
 
         // If it's already v1-shaped with payload.properties, pass through

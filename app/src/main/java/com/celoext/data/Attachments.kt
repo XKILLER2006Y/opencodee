@@ -90,11 +90,13 @@ object Attachments {
                 if (mf.isFile) mirror = "${sessionDir.trimEnd('/')}/uploads/${mf.name}"
             }
         }
-        val guest = "$UPLOADS/${f.name}"
+        // The agent (native server) sees the real Android home, not /root: give it the translated path.
+        val guest = com.celoext.Graph.paths.serverPath("$UPLOADS/${f.name}")
+        val guestMirror = if (mirror.isNotEmpty()) com.celoext.Graph.paths.serverPath(mirror) else ""
         return synthetic(
             "<attached-file path=\"$guest\" name=\"${a.name}\" mime=\"${a.mime}\" size=\"$written\"/>\n" +
                 "The user attached the file ${a.name} (${a.mime}, ${human(written)}). It is saved at $guest" +
-                (if (mirror.isNotEmpty()) " (also at $mirror)" else "") +
+                (if (guestMirror.isNotEmpty()) " (also at $guestMirror)" else "") +
                 " — open it with your tools when needed.",
         )
     }

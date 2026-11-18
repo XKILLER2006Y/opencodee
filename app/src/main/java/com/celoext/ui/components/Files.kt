@@ -83,8 +83,12 @@ object OutFiles {
     /** Guest path → host file, only if it's a regular file inside the environment. */
     fun host(guest: String): File? {
         if (!guest.startsWith("/") || guest.contains("..")) return null
-        val f = Graph.paths.host(guest)
-        return f.takeIf { it.isFile && it.canonicalPath.startsWith(Graph.paths.rootfs.canonicalPath) }
+        // The native agent speaks real Android paths; the classic /root form is the app's own view.
+        val f = runCatching { Graph.paths.clientPath(guest.trimEnd('/')) }.getOrDefault(guest).let { Graph.paths.host(it) }
+        val canon = f.canonicalPath
+        // /root now lives in the native home; everything else stays in the rootfs.
+        val inside = canon.startsWith(Graph.paths.rootfs.canonicalPath) || canon.startsWith(Graph.paths.nativeHome.canonicalPath)
+        return f.takeIf { it.isFile && inside }
     }
 
     fun mime(f: File): String =

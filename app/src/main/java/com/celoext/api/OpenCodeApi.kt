@@ -111,8 +111,13 @@ class OpenCodeApi(private val prefs: Prefs) {
         return msg ?: "HTTP $code" + body.take(200).let { if (it.isBlank()) "" else ": $it" }
     }
 
-    private fun dir(d: String?) = if (d.isNullOrBlank()) emptyMap() else mapOf("directory" to d)
-    private fun loc(d: String?) = if (d.isNullOrBlank()) emptyMap() else mapOf("location[directory]" to d)
+    // Directory arguments: the app stores the classic /root layout everywhere, the native server
+    // sees its real Android home, so translate on the way in and back on the way out. A remote
+    // device keeps its own layout untouched.
+    private fun dir(d: String?) = if (d.isNullOrBlank()) emptyMap()
+        else mapOf("directory" to if (Graph.devices.isRemote) d else Graph.paths.serverPath(d))
+    private fun loc(d: String?) = if (d.isNullOrBlank()) emptyMap()
+        else mapOf("location[directory]" to if (Graph.devices.isRemote) d else Graph.paths.serverPath(d))
 
     // ---------- server ----------
 
@@ -166,7 +171,7 @@ class OpenCodeApi(private val prefs: Prefs) {
 
     suspend fun createSession(directory: String, title: String? = null, permission: JsonArray? = null): Session {
         val body = buildJsonObject {
-            putJsonObject("location") { put("directory", directory) }
+            putJsonObject("location") { put("directory", if (Graph.devices.isRemote) directory else Graph.paths.serverPath(directory)) }
             title?.let { put("title", it) }
             permission?.let { put("permissions", it) }
         }
@@ -442,6 +447,25 @@ class OpenCodeApi(private val prefs: Prefs) {
         }
     }
 
+    /**
+     * Fully disconnects a provider. Removing the stored credentials alone is not enough for custom
+     * providers: their block in the global config (`providers.<id>` with the key inline) keeps them
+     * connected, so it is removed from the config document as well, then the server reloads it.
+     */
+    suspend fun removeProvider(providerId: String) = configMutex.withLock {
+        val (docPath, info) = configDocument()
+        val blocks = info.obj("providers")
+        if (blocks?.containsKey(providerId) == true) {
+            val rest = blocks.toMutableMap().apply { remove(providerId) }
+            val doc = info.toMutableMap()
+            if (rest.isEmpty()) doc.remove("providers") else doc["providers"] = JsonObject(rest)
+            callRaw("/api/experimental/fs/write", mapOf("path" to docPath), JsonObject(doc).toString().toByteArray(Charsets.UTF_8))
+            runCatching { call("POST", "/api/location/reload") }
+        }
+        runCatching { removeAuth(providerId) }
+        disposeAll()
+    }
+
     suspend fun oauthAuthorize(providerId: String, method: Int, inputs: Map<String, String> = emptyMap()): JsonObject {
         val iRes = call("GET", "/api/integration")
         val iArr = (iRes as? JsonObject)?.arr("data") ?: iRes as? JsonArray ?: JsonArray(emptyList())
@@ -628,9 +652,12 @@ class OpenCodeApi(private val prefs: Prefs) {
         })
     }
 
+    /** The server's working directory, shown back to the user in the classic /root form. */
     suspend fun serverDirectory(): String? {
         val res = call("GET", "/api/location") as? JsonObject
-        return res?.str("directory")
+        return res?.str("directory")?.let { p ->
+            runCatching { Graph.paths.clientPath(p) }.getOrDefault(p)
+        }
     }
 
     suspend fun projects(): JsonArray {
@@ -649,6 +676,6 @@ class OpenCodeApi(private val prefs: Prefs) {
 internal fun configFilePath(entries: List<JsonObject>): String {
     entries.firstOrNull { it.str("type") == "document" }?.str("path")?.takeIf { it.isNotBlank() }?.let { return it }
     val dir = entries.firstOrNull { it.str("type") == "directory" }?.str("path")?.takeIf { it.isNotBlank() }
-        ?: "/root/.config/opencode"
+        ?: com.celoext.Graph.paths.serverPath("/root/.config/opencode")
     return java.io.File(dir, "opencode.json").path
 }
