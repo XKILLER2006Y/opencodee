@@ -179,9 +179,10 @@ object PhoneBridge {
     )
 
     private fun servePreview(out: OutputStream, guest: String) {
-        val root = Graph.paths.host("/").canonicalFile
-        var f = Graph.paths.host(guest).canonicalFile
-        if (f.path != root.path && !f.path.startsWith(root.path + File.separator)) return respond(out, 404, "text/plain", ByteArray(0))
+        // The agent passes real Android paths (its home is the native home); the classic /root form works too.
+        val roots = listOf(Graph.paths.rootfs, Graph.paths.nativeHome).map { it.canonicalFile }
+        var f = Graph.paths.host(runCatching { Graph.paths.clientPath(guest) }.getOrDefault(guest)).canonicalFile
+        if (roots.none { f.path == it.path || f.path.startsWith(it.path + File.separator) }) return respond(out, 404, "text/plain", ByteArray(0))
         if (f.isDirectory) f = File(f, "index.html")
         if (!f.isFile) return respond(out, 404, "text/plain", "not found".toByteArray())
         // stream the file instead of loading it whole (a big video would run the app out of memory)

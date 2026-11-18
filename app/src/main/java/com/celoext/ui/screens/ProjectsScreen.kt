@@ -85,7 +85,7 @@ fun NewProjectDialog(onDone: () -> Unit) {
     OcDialog("New project", onDone, "Create", {
         if (!validName(name)) { error = "Use letters, digits, space, - _ ."; return@OcDialog }
         val dir = "$WORK_ROOT/${name.trim()}"
-        File(Graph.paths.rootfs, dir.trimStart('/')).mkdirs()
+        if (!Graph.devices.isRemote) Graph.paths.host(dir).mkdirs()
         Graph.prefs.currentDir = dir
         onDone()
     }) {

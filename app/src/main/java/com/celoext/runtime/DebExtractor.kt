@@ -30,12 +30,14 @@ object DebExtractor {
             }
             val data = dataTar ?: error("${deb.name} has no data.tar.xz member")
             // Termux debs are double compressed today; accept a plain .gz or .tar too, cheap insurance.
+            val raw = TarExtractor.CountingStream(data.inputStream())
             val tar: InputStream = when {
-                data.size > 6 && data[0] == 0xFD.toByte() && data[1] == '7'.code.toByte() && data[2] == 'z'.code.toByte() -> XZInputStream(data.inputStream())
-                data.size > 2 && data[0] == 0x1F.toByte() && data[1] == 0x8B.toByte() -> java.util.zip.GZIPInputStream(data.inputStream())
-                else -> data.inputStream()
+                data.size > 6 && data[0] == 0xFD.toByte() && data[1] == '7'.code.toByte() && data[2] == 'z'.code.toByte() -> XZInputStream(raw)
+                data.size > 2 && data[0] == 0x1F.toByte() && data[1] == 0x8B.toByte() -> java.util.zip.GZIPInputStream(raw)
+                else -> raw
             }
-            return TarExtractor.extract(tar, data.size.toLong(), dest, onProgress)
+            // Progress is measured on the compressed member, the unit of the total passed here.
+            return TarExtractor.extract(tar, data.size.toLong(), dest, onProgress, consumed = { raw.count })
         }
     }
 

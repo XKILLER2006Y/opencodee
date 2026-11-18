@@ -14,7 +14,7 @@ val keystoreProps = Properties().apply {
 
 android {
     namespace = "com.celoext"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.celoext"

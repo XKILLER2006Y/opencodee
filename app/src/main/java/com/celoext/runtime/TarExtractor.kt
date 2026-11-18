@@ -16,11 +16,23 @@ object TarExtractor {
     class Result(val files: Int, val skipped: Int)
 
     fun extract(archive: File, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): Result {
-        return extract(java.util.zip.GZIPInputStream(java.io.FileInputStream(archive).buffered(1 shl 16), 1 shl 16), archive.length(), dest, onProgress)
+        // Count the compressed bytes read from the file: `total` is the archive size, and counting the
+        // decompressed stream instead would hit 100% long before the unpacking is done.
+        val raw = CountingStream(FileInputStream(archive).buffered(1 shl 16))
+        return GZIPInputStream(raw, 1 shl 16).use { gz ->
+            extract(gz, archive.length(), dest, onProgress, consumed = { raw.count })
+        }
     }
 
     /** Same layout rules as [extract], but the caller supplies the (already decompressed) tar stream. */
-    fun extract(input: java.io.InputStream, total: Long, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): Result {
+    fun extract(
+        input: java.io.InputStream,
+        total: Long,
+        dest: File,
+        onProgress: (done: Long, total: Long) -> Unit = { _, _ -> },
+        /** Bytes consumed so far in the units of [total]; defaults to what was read from [input]. */
+        consumed: (() -> Long)? = null,
+    ): Result {
         dest.mkdirs()
         val destCanon = dest.canonicalFile
         // "/a/rootfs-evil" must not count as inside "/a/rootfs": compare with a trailing separator
@@ -75,10 +87,11 @@ object TarExtractor {
                 }
                 val target = File(dest, rel)
                 val parent = target.parentFile
-                parent?.mkdirs()
+                // Check before creating anything: a symlink from an earlier entry must not make mkdirs() build folders outside.
                 if (parent != null && !inside(parent)) {
                     skip(gz, size + pad(size)); skipped++; continue
                 }
+                parent?.mkdirs()
 
                 when (type) {
                     '5' -> {
@@ -118,7 +131,7 @@ object TarExtractor {
                     else -> { skip(gz, size + pad(size)); skipped++ } // devices, fifo
                 }
 
-                val now = counting.count
+                val now = consumed?.invoke() ?: counting.count
                 if (now - lastReport > 256 * 1024) { lastReport = now; onProgress(now, total) }
             }
         }
@@ -190,7 +203,7 @@ object TarExtractor {
         return v
     }
 
-    private class CountingStream(i: InputStream) : FilterInputStream(i) {
+    internal class CountingStream(i: InputStream) : FilterInputStream(i) {
         var count = 0L
         override fun read(): Int = super.read().also { if (it >= 0) count++ }
         override fun read(b: ByteArray, off: Int, len: Int): Int = super.read(b, off, len).also { if (it > 0) count += it }

@@ -36,12 +36,14 @@ object Root {
     }
 
     /** Runs the process, drains its output on a thread, and force-stops it after [timeoutSec] so a hung su can never block. */
-    private fun execCapture(timeoutSec: Long, start: () -> Process): String {
-        val p = start()
+    private fun execCapture(timeoutSec: Long, launch: () -> Process): String {
+        val p = launch()
         val text = StringBuilder()
         val reader = Thread {
             runCatching { p.inputStream.bufferedReader().forEachLine { text.appendLine(it) } }
-        }.apply { isDaemon = true; start() }
+        }
+        reader.isDaemon = true
+        reader.start()
         val done = p.waitFor(timeoutSec, TimeUnit.SECONDS)
         if (!done) p.destroyForcibly()
         runCatching { reader.join(2_000) }
@@ -74,19 +76,28 @@ object Root {
         }
     }
 
-    /** chmod a+rwX the path (or mkdir it) plus every missing/denied parent, through su. */
+    private val SYSTEM_ROOTS = setOf(
+        "/", "/data", "/data/data", "/data/user", "/data/user/0", "/data/media", "/data/media/0",
+        "/storage", "/storage/emulated", "/storage/emulated/0", "/sdcard", "/mnt", "/system", "/vendor",
+    )
+
+    /** chmod a+rwX the path (or mkdir it) plus its parents (write on the direct parent, traverse above), through su. */
     fun openForApp(file: File): Boolean {
         if (!available()) return false
         val path = file.absolutePath
         // 'test -e' first: chmod on a missing file would fail, but creating it needs the parent open.
+        // Only the direct parent needs write access; the folders above it just have to be traversable (a+x).
+        // System roots are never touched: opening "/", /data or /data/data to every app would be a hole.
         val chain = StringBuilder().apply {
-            var d = file
-            if (d.isDirectory) append("chmod -R a+rwX '$path'; ")
-            else append("[ -e '$path' ] && chmod a+rwX '$path'; ")
-            while (true) {
-                d = d.parentFile ?: break
-                append("chmod a+rwx '${d.absolutePath}'; ")
-                if (d.absolutePath == "/" ) break
+            val q = shellQuote(path)
+            if (file.isDirectory) append("chmod -R a+rwX $q; ")
+            else append("[ -e $q ] && chmod a+rwX $q; ")
+            var d: File? = file.parentFile
+            var direct = true
+            while (d != null && d.absolutePath !in SYSTEM_ROOTS) {
+                append(if (direct) "chmod a+rwx " else "chmod a+x ").append(shellQuote(d.absolutePath)).append("; ")
+                direct = false
+                d = d.parentFile
             }
         }.toString()
         val rc = run("sh -c ${shellQuote(chain)}", timeoutSec = 20)

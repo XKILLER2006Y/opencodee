@@ -87,7 +87,8 @@ object OutFiles {
         val f = runCatching { Graph.paths.clientPath(guest.trimEnd('/')) }.getOrDefault(guest).let { Graph.paths.host(it) }
         val canon = f.canonicalPath
         // /root now lives in the native home; everything else stays in the rootfs.
-        val inside = canon.startsWith(Graph.paths.rootfs.canonicalPath) || canon.startsWith(Graph.paths.nativeHome.canonicalPath)
+        fun within(root: File) = root.canonicalPath.let { canon == it || canon.startsWith(it + File.separator) }
+        val inside = within(Graph.paths.rootfs) || within(Graph.paths.nativeHome)
         return f.takeIf { it.isFile && inside }
     }
 

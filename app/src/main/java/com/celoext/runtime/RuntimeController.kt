@@ -102,6 +102,9 @@ class RuntimeController(
 
             prefs.runtimeReady = true
             state.value = RuntimeState.Stopped
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            state.value = RuntimeState.InstallFailed("Installation was interrupted")
+            throw e
         } catch (e: Throwable) {
             logLine("Install failed: ${e.message}")
             state.value = RuntimeState.InstallFailed(e.message ?: e.javaClass.simpleName)
@@ -116,7 +119,11 @@ class RuntimeController(
      * Everything is downloaded with pinned sha-256s and unpacked with our own extractors.
      */
     private fun installNative() {
-        if (paths.opencodeNativeBin.isFile && !runCatching { File(paths.opencodeBundle, "index.js").isFile }.getOrDefault(false)) {
+        // Also redo a bundle that was extracted but never fully patched (an earlier install died half way):
+        // it would be reused as is and then fail at startup with placeholder paths.
+        if (paths.opencodeNativeBin.isFile &&
+            (!runCatching { File(paths.opencodeBundle, "index.js").isFile }.getOrDefault(false) || bundleHasPlaceholders())
+        ) {
             paths.bundleDir.deleteRecursively()
         }
         if (!paths.opencodeNativeBin.isFile) {
@@ -132,20 +139,17 @@ class RuntimeController(
             val marker = "@TERMUX_PREFIX@/lib/opencode"
             val ours = paths.opencodeBundle.path
             var patched = 0
-            paths.bundleDir.walkTopDown().filter { it.isFile && it.length() < 40 * 1_000_000 }.forEach { f ->
-                // Never rewrite binaries: a stray marker inside a .so would corrupt them.
-                if (f.extension in setOf("so", "node", "bin")) return@forEach
-                val text = runCatching { f.readText() }.getOrNull() ?: return@forEach
+            // Never rewrite binaries (bundleFiles skips .so/.node/.bin). ISO-8859-1 maps every byte to one char,
+            // so a file that isn't valid UTF-8 still comes back byte for byte except for the replaced marker.
+            bundleFiles().forEach { f ->
+                val text = runCatching { String(f.readBytes(), Charsets.ISO_8859_1) }.getOrNull() ?: return@forEach
                 if (text.contains(marker)) {
-                    f.writeText(text.replace(marker, ours))
+                    f.writeBytes(text.replace(marker, ours).toByteArray(Charsets.ISO_8859_1))
                     patched++
                 }
             }
             logLine("bundle: patched $patched files from @TERMUX_PREFIX@ to ${paths.bundleDir.path}")
-            val leftover = paths.bundleDir.walkTopDown()
-                .filter { it.isFile && it.length() < 40 * 1_000_000 && it.extension !in setOf("so", "node", "bin") }
-                .any { runCatching { it.readText().contains("@TERMUX_PREFIX@") }.getOrDefault(false) }
-            if (leftover) error("Release bundle still contains placeholder paths; it cannot run here")
+            if (bundleHasPlaceholders()) error("Release bundle still contains placeholder paths; it cannot run here")
             // The launcher ships with a Termux shebang; Android's /system/bin/sh is the equivalent here.
             val launcher = paths.opencodeNativeBin
             val shebang = "#!/system/bin/sh\n"
@@ -184,16 +188,28 @@ class RuntimeController(
         paths.tmp.mkdirs()
         paths.nativeHome.mkdirs()
         // One-time migration: an existing proot install keeps its /root inside the old rootfs.
+        // A marker instead of "the native home is empty": Vault.restore() and Memory.sync() fill it before this runs.
         val oldRoot = File(paths.rootfs, "root")
-        if (oldRoot.isDirectory && oldRoot.list()?.isNotEmpty() == true && paths.nativeHome.list()?.isEmpty() != false) {
+        val migrated = File(paths.nativeHome, ".migrated-from-rootfs")
+        if (!migrated.exists() && oldRoot.isDirectory && oldRoot.list()?.isNotEmpty() == true) {
             logLine("migrating the old /root into the native home")
-            runCatching { oldRoot.copyRecursively(paths.nativeHome, overwrite = false) }
+            // Files that already exist in the native home win; a clash must not abort the whole copy.
+            runCatching { oldRoot.copyRecursively(paths.nativeHome, overwrite = false) { _, _ -> kotlin.io.OnErrorAction.SKIP } }
+            runCatching { migrated.writeText("1") }
         }
         paths.nativeHome.resolve("work").mkdirs()
         paths.nativeHome.resolve(".config/opencode").mkdirs()
         paths.nativeHome.resolve("uploads").mkdirs()
         paths.nativeHome.resolve("outbox").mkdirs()
         prefs.opencodeVersion = OCT_VERSION
+    }
+
+    /** The text-like files of the release bundle (launcher, JS): never the native libraries. */
+    private fun bundleFiles(): Sequence<File> = paths.bundleDir.walkTopDown()
+        .filter { it.isFile && it.length() < 40 * 1_000_000 && it.extension !in setOf("so", "node", "bin") }
+
+    private fun bundleHasPlaceholders(): Boolean = bundleFiles().any { f ->
+        runCatching { String(f.readBytes(), Charsets.ISO_8859_1).contains("@TERMUX_PREFIX@") }.getOrDefault(false)
     }
 
     /** The environment the native server runs with: XDG paths all live in the native home. */
@@ -492,9 +508,8 @@ class RuntimeController(
                 killLeftoverJava()
                 // The chat database is only consistent once the server has stopped writing.
                 Vault.save()
-                // Wipe the native runtime (bundle, termux debs, home) too; the rootfs stays for 9router.
+                // Wipe the native runtime (bundle, termux debs, home). The proot rootfs stays: 9Router runs in it.
                 paths.native.deleteRecursively()
-                paths.rootfs.deleteRecursively()
                 paths.downloads.deleteRecursively()
                 prefs.runtimeReady = false
             } finally {
