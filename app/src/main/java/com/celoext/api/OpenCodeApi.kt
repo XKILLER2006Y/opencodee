@@ -676,6 +676,6 @@ class OpenCodeApi(private val prefs: Prefs) {
 internal fun configFilePath(entries: List<JsonObject>): String {
     entries.firstOrNull { it.str("type") == "document" }?.str("path")?.takeIf { it.isNotBlank() }?.let { return it }
     val dir = entries.firstOrNull { it.str("type") == "directory" }?.str("path")?.takeIf { it.isNotBlank() }
-        ?: com.celoext.Graph.paths.serverPath("/root/.config/opencode")
+        ?: runCatching { com.celoext.Graph.paths.serverPath("/root/.config/opencode") }.getOrDefault("/root/.config/opencode")
     return java.io.File(dir, "opencode.json").path
 }
