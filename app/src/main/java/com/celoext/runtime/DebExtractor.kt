@@ -9,9 +9,8 @@ import java.io.InputStream
  * `data.tar.xz` member holds the package files (the whole Termux prefix layout).
  */
 object DebExtractor {
-    class Result(val files: Int, val skipped: Int)
 
-    fun extract(deb: File, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): Result {
+    fun extract(deb: File, dest: File, onProgress: (done: Long, total: Long) -> Unit = { _, _ -> }): TarExtractor.Result {
         deb.inputStream().buffered(1 shl 16).use { input ->
             val magic = ByteArray(8)
             if (!readFully(input, magic) || String(magic) != "!<arch>\n") error("Not a .deb archive: ${deb.name}")

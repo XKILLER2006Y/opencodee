@@ -393,7 +393,7 @@ class RuntimeController(
                 // The bun server cmdline carries the bundle entry (lib/opencode/index.js); the legacy
                 // proot-era binary carried /usr/local/bin/opencode. Nothing else of ours matches.
                 if (cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(paths.opencodeNativeBin.path)) {
-                    val killed = runCatching { android.os.Process.killProcess(pid) }.getOrDefault(false)
+                    val killed = runCatching { android.os.Process.killProcess(pid); true }.getOrDefault(false)
                     if (!killed || isAlive(pid)) Root.kill(pid) // a root-run server answers only to su
                     logLine("Killed leftover server process $pid: ${cmd.take(120)}")
                 }

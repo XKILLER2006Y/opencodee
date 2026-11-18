@@ -57,14 +57,15 @@ object Root {
     }.getOrDefault(-1)
 
     /**
-     * Runs [op] and, when it throws a permission-denied [FileSystemException] and su is available,
-     * opens the path for this app (chmod a+rwX on the file and each parent, plus the parents are
-     * made searchable) and retries the operation once.
+     * Runs [op] and, when it throws a permission-denied [IOException] and su is available, opens
+     * the path for this app (chmod a+rwX on the file and each parent) and retries the operation once.
+     * (Android has no java.io.FileSystemException; the failing call reports EACCES as a plain
+     * "Permission denied" IOException.)
      */
     fun <T> withRetry(file: File?, op: () -> T): T {
         try {
             return op()
-        } catch (e: java.io.FileSystemException) {
+        } catch (e: java.io.IOException) {
             if (!e.message.orEmpty().contains("Permission denied", ignoreCase = true) || file == null || !available()) throw e
             val opened = openForApp(file)
             if (!opened) throw e
@@ -122,7 +123,8 @@ object Root {
         envSetter(pb)
         if (cwd != null) pb.directory(File(cwd))
         val direct = runCatching { pb.start() }
-        if (direct.isSuccess) return direct.get() to false
+        val p = direct.getOrNull()
+        if (p != null) return p to false
         val why = direct.exceptionOrNull()?.message ?: direct.exceptionOrNull()?.javaClass?.simpleName ?: ""
         if (!available()) throw direct.exceptionOrNull() ?: java.io.IOException("Could not start ${argv.firstOrNull()}")
         android.util.Log.w("Root", "Direct start failed ($why), retrying through su")
