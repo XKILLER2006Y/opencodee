@@ -96,9 +96,21 @@ object Graph {
         LiveNotify.start()
         // the server is up: connect the "phone" MCP to it (the config entry changes only when needed)
         scope.launch { runtime.state.collect { if (it is com.celoext.runtime.RuntimeState.Running) PhoneBridge.register() } }
-        Memory.sync()
-        Vault.restore()
-        Vault.reconcileAccount()
-        scope.launch(Dispatchers.IO) { while (true) { Vault.saveLight(); Vault.reconcileAccount(); delay(30_000) } }
+        // With no native runtime yet, /root still lives in the old proot rootfs: install() migrates
+        // it and restores the vault first. Writing a fresh AGENTS.md here would create a newer
+        // placeholder that the vault restore then refuses to overwrite, losing the user's rules.
+        if (paths.nativeReady) {
+            Vault.restore()
+            Memory.sync()
+            Vault.reconcileAccount()
+        }
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                // A reset in this session deletes the native home: do not overwrite the good vault
+                // copy with files read from an empty one.
+                if (paths.nativeReady) { Vault.saveLight(); Vault.reconcileAccount() }
+                delay(30_000)
+            }
+        }
     }
 }

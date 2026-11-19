@@ -89,11 +89,14 @@ class RuntimeController(
                 val r = TarExtractor.extract(tgz, paths.rootfs) { d, t -> step("Unpacking environment", frac(d, t)) }
                 logLine("rootfs: ${r.files} files, skipped ${r.skipped}")
                 configureRootfs()
-                prefs.seededSkills = "" // fresh Ubuntu: the default skills have to be copied in again
                 tgz.delete()
             }
 
+            migrateLegacyHome()
             Vault.restore()
+            // The native home is new even when the old proot home had the skills, so check them
+            // again: seed() keeps existing files and only copies the ones that are missing.
+            prefs.seededSkills = ""
             Memory.sync() // copies the default skills and writes their rules into AGENTS.md
             installNative()
             nativeSmokeTest()
@@ -185,21 +188,41 @@ class RuntimeController(
         if (!File(usrRoot, "bin/bun").isFile) error("bun did not land in the Termux layout; install failed")
         paths.tmp.mkdirs()
         paths.nativeHome.mkdirs()
-        // One-time migration: an existing proot install keeps its /root inside the old rootfs.
-        // A marker instead of "the native home is empty": Vault.restore() and Memory.sync() fill it before this runs.
-        val oldRoot = File(paths.rootfs, "root")
-        val migrated = File(paths.nativeHome, ".migrated-from-rootfs")
-        if (!migrated.exists() && oldRoot.isDirectory && oldRoot.list()?.isNotEmpty() == true) {
-            logLine("migrating the old /root into the native home")
-            // Files that already exist in the native home win; a clash must not abort the whole copy.
-            runCatching { oldRoot.copyRecursively(paths.nativeHome, overwrite = false) { _, _ -> kotlin.io.OnErrorAction.SKIP } }
-            runCatching { migrated.writeText("1") }
-        }
         paths.nativeHome.resolve("work").mkdirs()
         paths.nativeHome.resolve(".config/opencode").mkdirs()
         paths.nativeHome.resolve("uploads").mkdirs()
         paths.nativeHome.resolve("outbox").mkdirs()
         prefs.opencodeVersion = OCT_VERSION
+    }
+
+    /**
+     * One-time copy of the old proot /root into the native home. The live rootfs is the newer truth,
+     * but [Vault.restore] may already have filled the native home from its backups on this start, so
+     * a file is replaced only when it is missing, has a different length or the old copy is newer.
+     * That also retries a file cut short by a killed app, and it never lets an older backup shadow
+     * newer chats or keys.
+     *
+     * The marker is written only after a complete pass. The old code marked a partial copy as done,
+     * so files that failed (disk full, killed app) were never tried again.
+     */
+    private fun migrateLegacyHome() {
+        val oldRoot = File(paths.rootfs, "root")
+        val marker = File(paths.nativeHome, ".migrated-from-rootfs")
+        if (marker.exists() || !oldRoot.isDirectory || oldRoot.list()?.isNotEmpty() != true) return
+        logLine("migrating the old /root into the native home")
+        paths.nativeHome.mkdirs()
+        var failed = 0
+        oldRoot.walkTopDown().forEach { src ->
+            val dst = File(paths.nativeHome, src.relativeTo(oldRoot).path)
+            if (src.isDirectory) {
+                dst.mkdirs()
+            } else if (src.isFile && shouldMigrateLegacyFile(dst.isFile, dst.length(), dst.lastModified(), src.length(), src.lastModified())) {
+                runCatching { dst.parentFile?.mkdirs(); src.copyTo(dst, overwrite = true) }
+                    .onFailure { failed++ }
+            }
+        }
+        if (failed == 0) runCatching { marker.writeText("1") }
+        else logLine("migration left $failed files behind; it will retry on the next start")
     }
 
     /** The text-like files of the release bundle (launcher, JS): never the native libraries. */
@@ -554,3 +577,16 @@ class RuntimeController(
         return true
     }
 }
+
+/**
+ * Whether a file from the old proot /root should be written into the native home. A missing file is
+ * copied. A different length means the target is truncated or an older revision, so copy. Otherwise
+ * the old copy wins only when it is newer than what is already there.
+ */
+internal fun shouldMigrateLegacyFile(
+    targetExists: Boolean,
+    targetLength: Long,
+    targetModified: Long,
+    sourceLength: Long,
+    sourceModified: Long,
+): Boolean = !targetExists || targetLength != sourceLength || sourceModified > targetModified
