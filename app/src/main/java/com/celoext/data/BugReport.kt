@@ -31,6 +31,10 @@ object BugReport {
         if (withLog) {
             val log = clean(Graph.runtime.log.value.takeLast(60))
             if (log.isNotEmpty()) sb.append("\n**Server log (last lines)**\n\n```\n").append(log.joinToString("\n")).append("\n```\n")
+            // Client-side failures are invisible in the server log; three short entries are enough to
+            // point at the screen and still fit in a GitHub issue URL.
+            val appLog = clean(CrashLog.lines.value.takeLast(3)).map { it.take(400) }
+            if (appLog.isNotEmpty()) sb.append("\n**App log**\n\n```\n").append(appLog.joinToString("\n---\n")).append("\n```\n")
         }
         return sb.toString()
     }

@@ -44,6 +44,7 @@ import com.celoext.BuildConfig
 import com.celoext.Graph
 import com.celoext.api.OcJson
 import com.celoext.api.str
+import com.celoext.data.CrashLog
 import com.celoext.runtime.RuntimeState
 import com.celoext.ui.Nav
 import com.celoext.ui.components.IconBtn
@@ -142,8 +143,10 @@ fun ServerScreen(nav: Nav) {
     val scope = rememberCoroutineScope()
     val rt by Graph.runtime.state.collectAsState()
     val log by Graph.runtime.log.collectAsState()
+    val appLog by CrashLog.lines.collectAsState()
     val prefs = Graph.prefs
     var showLog by remember { mutableStateOf(false) }
+    var showAppLog by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<List<String>?>(null) }
     var reset by remember { mutableStateOf(false) }
 
@@ -188,6 +191,7 @@ fun ServerScreen(nav: Nav) {
                         lines.add(if (code == 0) "✓ Done" else "✗ Failed (exit $code)")
                     }
                 })
+                SettingsRow("App log", subtitle = "Errors from the app itself, sent with a bug report", icon = Ic.Warning, onClick = { showAppLog = true })
                 SettingsRow("Don't kill the server in background", subtitle = "Exempt the app from battery optimization", icon = Ic.Zap, onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 })
@@ -203,6 +207,7 @@ fun ServerScreen(nav: Nav) {
     }
 
     if (showLog) LogSheet(log) { showLog = false }
+    if (showAppLog) LogSheet(appLog, "App log") { showAppLog = false }
     tools?.let { lines -> LogSheet(lines, "Installing tools") { tools = null } }
     if (reset) OcDialog("Reset environment?", { reset = false }, "Reset", {
         reset = false; Graph.runtime.resetRuntime()

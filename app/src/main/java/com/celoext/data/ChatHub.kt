@@ -45,6 +45,9 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     val retries = MutableStateFlow<Map<String, RetryInfo>>(emptyMap())
     val toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
 
+    /** Bumped on every live status change, so a slow refresh can tell whether its data is still current. */
+    private val statusEpoch = java.util.concurrent.atomic.AtomicLong(0)
+
     private val chats = HashMap<String, Chat>()
 
     /** Tasks cut off when the server stopped: the chat offers to continue or cancel. */
@@ -116,6 +119,10 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     private class Extras(val perms: List<PermissionReq>, val questions: List<QuestionReq>, val statuses: Map<String, String>)
 
     suspend fun refreshSessions() {
+        // Three requests per directory take a while; a status event that arrives meanwhile is newer than
+        // this snapshot and must not be overwritten by it (that left chats stuck on "working" or, worse,
+        // on "idle" while the agent was still running).
+        val epoch = statusEpoch.get()
         try {
             // Parsing the session list belongs off the UI thread too.
             val list = withContext(Dispatchers.IO) { api.listSessions(limit = com.celoext.api.OpenCodeApi.MAX_LIMIT) }
@@ -152,8 +159,9 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             permissions.value = manual
             auto.forEach { r -> Graph.scope.launch { runCatching { api.replyPermission(r.id, session(r.sessionID)?.directory, "once", r.sessionID) } } }
             questions.value = qs
-            findInterrupted(st.keys)
-            statuses.value = st
+            val merged = mergeStatuses(statuses.value, st, epoch == statusEpoch.get())
+            findInterrupted(merged.keys)
+            statuses.value = merged
             saveBusy()
         } catch (_: Exception) { }
     }
@@ -197,6 +205,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                 val t = p.obj("status")?.str("type") ?: return
                 val was = statuses.value[id]
                 statuses.update { if (t == "idle") it - id else it + (id to t) }
+                statusEpoch.incrementAndGet()
                 saveBusy()
                 if (t != "idle" && id in interrupted.value) dismissInterrupted(id)
                 if (t == "idle" && was != null) finished(id)
@@ -210,6 +219,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             "session.idle" -> p.str("sessionID")?.let { id ->
                 val was = statuses.value[id]
                 statuses.update { it - id }
+                statusEpoch.incrementAndGet()
                 saveBusy()
                 if (was != null) finished(id)
                 Graph.scope.launch {
@@ -432,6 +442,17 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
 }
 
 data class RetryInfo(val message: String, val label: String?, val link: String?, val title: String?, val nextAt: Long? = null)
+
+/**
+ * Statuses from a session-list refresh against the ones live events produced meanwhile.
+ * `unchanged` means no event arrived during the refresh, so the snapshot is the newest truth.
+ */
+internal fun mergeStatuses(
+    current: Map<String, String>,
+    fetched: Map<String, String>,
+    unchanged: Boolean,
+): Map<String, String> =
+    if (unchanged) fetched else current + fetched.filterKeys { it !in current }
 
 data class Attachment(val uri: Uri, val mime: String, val name: String) {
     val isImage get() = mime.startsWith("image/")
