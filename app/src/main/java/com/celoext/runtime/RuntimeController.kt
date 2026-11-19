@@ -559,12 +559,26 @@ class RuntimeController(
         // Deleting the environment is hundreds of megabytes and thousands of files: not on the main thread.
         Thread {
             try {
+                // 9Router keeps its data under /root, which is inside the native home this reset
+                // deletes. Stop it first instead of pulling its database out from under it.
+                runCatching { com.celoext.Graph.ninerouter.stopServer() }
+                var nr = 0
+                while (nr < 10_000 && (com.celoext.Graph.ninerouter.serverAlive || com.celoext.Graph.ninerouter.portBusy())) {
+                    Thread.sleep(200); nr += 200
+                }
                 stopServer()
                 var waited = 0
                 while (waited < 10_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
-                killLeftoverJava()
-                // The chat database is only consistent once the server has stopped writing.
-                Vault.save()
+                if (serverAlive || portBusy()) {
+                    killLeftoverJava()
+                    waited = 0
+                    while (waited < 5_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
+                }
+                // SQLite finishes its last write just after the socket closes.
+                Thread.sleep(800)
+                val stopped = !serverAlive && !portBusy()
+                if (!stopped) logLine("Server is still running; keeping the previous chat backup instead of copying a live database")
+                Vault.save(includeChats = stopped)
                 // Wipe the native runtime (bundle, termux debs, home). The proot rootfs stays: 9Router runs in it.
                 paths.native.deleteRecursively()
                 paths.downloads.deleteRecursively()

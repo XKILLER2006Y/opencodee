@@ -29,9 +29,13 @@ object Vault {
         to.setLastModified(from.lastModified())
     }
 
-    /** From the rootfs to the vault. An empty or broken auth.json doesn't overwrite a good copy. */
-    fun save() {
+    /**
+     * From the rootfs to the vault. [includeChats] must be false when the server could not be
+     * stopped: copying SQLite while it is writing leaves a database that cannot be restored.
+     */
+    fun save(includeChats: Boolean = true) {
         saveLight()
+        if (!includeChats) return
         runCatching {
             // The chat database is SQLite: copy it only when the server is not writing (stop/reset/backup).
             copyIfNewer(live(DB), File(root, DB))

@@ -141,7 +141,7 @@ object FreeModels {
                         .put("gpt-4o-mini-2024-07-18", model("GPT-4o mini", 128000, 16384, true, false, true)),
                 ),
         )
-        if (select) finish(COPILOT_ID, COPILOT_DEFAULT) else { runCatching { Graph.api.disposeAll() }; runCatching { Graph.catalog.refresh() }; Vault.save() }
+        if (select) finish(COPILOT_ID, COPILOT_DEFAULT) else { runCatching { Graph.api.disposeAll() }; runCatching { Graph.catalog.refresh() }; Vault.saveLight() }
         return true
     }
 
@@ -160,7 +160,7 @@ object FreeModels {
     suspend fun disable(providerId: String) {
         runCatching { apply(providerId, null) }
         runCatching { Graph.catalog.refresh() }
-        Vault.save()
+        Vault.saveLight()
     }
 
     suspend fun finish(providerId: String, modelId: String) {
@@ -169,6 +169,6 @@ object FreeModels {
         // provider, otherwise the Connected section only updates after the next app start.
         runCatching { Graph.catalog.awaitProvider(providerId) }
         Graph.prefs.providerId = providerId; Graph.prefs.modelId = modelId; Graph.prefs.variant = ""
-        Vault.save()
+        Vault.saveLight()
     }
 }
