@@ -423,6 +423,7 @@ class RuntimeController(
                 logLine("Port ${prefs.serverPort} still busy, killing leftover server (attempt ${i + 1})")
                 killLeftoverJava()
                 if (waitPortFree(4_000)) return
+                // A server started through su is invisible to the scan above: ask pidof as root.
                 Root.pidsOf("bun").filter { pid -> isLeftoverServer(pid) }.forEach { Root.kill(it) }
                 if (waitPortFree(2_000)) return
             }
@@ -436,25 +437,37 @@ class RuntimeController(
     }
 
     /** True when [pid]'s cmdline is one of our server processes (bun running the bundle, or a proot-era leftover). */
-    private fun isLeftoverServer(pid: Int): Boolean {
-        val cmd = runCatching { java.io.File("/proc/$pid/cmdline").readBytes().decodeToString().replace('\u0000', ' ').trim() }.getOrDefault("")
-        return cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(paths.opencodeNativeBin.path)
+    private fun isLeftoverServer(pid: Int): Boolean = isServerCommand(cmdlineOf(pid), paths.opencodeNativeBin.path)
+
+    /**
+     * The command line of [pid]. Read directly when possible, through su when the process is hidden
+     * from this app (a server that [Root.spawnWithFallback] started as root).
+     */
+    private fun cmdlineOf(pid: Int): String {
+        val direct = directCmdline(pid)
+        return if (direct.isNotEmpty()) direct else Root.cmdlineOf(pid)
     }
+
+    private fun directCmdline(pid: Int): String =
+        runCatching { java.io.File("/proc/$pid/cmdline").readBytes().decodeToString() }.getOrDefault("")
+            .replace('\u0000', ' ').trim()
 
     /**
      * Kills leftover server processes found by scanning /proc: the guest processes (and the native
      * bun) run with this app's UID, so their cmdline is readable and they can be signalled directly.
+     * A root-run server is invisible here; [freePort] finds that one through pidof, and only when
+     * the port is actually stuck.
      */
     private fun killLeftoverJava() {
         runCatching {
             for (p in java.io.File("/proc").listFiles() ?: emptyArray()) {
                 val pid = p.name.toIntOrNull() ?: continue
                 if (pid == android.os.Process.myPid()) continue
-                val cmd = runCatching { java.io.File(p, "cmdline").readBytes().decodeToString().replace('\u0000', ' ').trim() }.getOrDefault("")
+                val cmd = directCmdline(pid)
                 if (cmd.isEmpty()) continue
                 // The bun server cmdline carries the bundle entry (lib/opencode/index.js); the legacy
                 // proot-era binary carried /usr/local/bin/opencode. Nothing else of ours matches.
-                if (cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(paths.opencodeNativeBin.path)) {
+                if (isServerCommand(cmd, paths.opencodeNativeBin.path)) {
                     val killed = runCatching { android.os.Process.killProcess(pid); true }.getOrDefault(false)
                     if (!killed || isAlive(pid)) Root.kill(pid) // a root-run server answers only to su
                     logLine("Killed leftover server process $pid: ${cmd.take(120)}")
@@ -604,3 +617,10 @@ internal fun shouldMigrateLegacyFile(
     sourceLength: Long,
     sourceModified: Long,
 ): Boolean = !targetExists || targetLength != sourceLength || sourceModified > targetModified
+
+/**
+ * Whether a process command line belongs to our server: bun running the bundle, the launcher, or
+ * the proot-era binary. Anything else must not be killed, even when the process is called bun.
+ */
+internal fun isServerCommand(cmd: String, nativeBinPath: String): Boolean =
+    cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(nativeBinPath)
