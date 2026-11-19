@@ -67,7 +67,7 @@ fun ProvidersScreen(nav: Nav) {
     LaunchedEffect(Unit) { load() }
 
     val connectedIds = connected.map { it.id }.toSet()
-    val kami = com.celoext.data.CustomProviders.KAMIHUB
+    val kami = com.celoext.data.CustomProviders.ATMOKAMIHUB
     val nr = com.celoext.data.CustomProviders.NINEROUTER(Graph.ninerouter.port)
     val showKamihub = kami.id !in connectedIds && (query.isBlank() || kami.name.contains(query, true) || kami.id.contains(query, true))
     val showNineRouter = nr.id !in connectedIds && (query.isBlank() || nr.name.contains(query, true) || nr.id.contains(query, true))
@@ -118,7 +118,7 @@ fun ProvidersScreen(nav: Nav) {
     connect?.let { p ->
         ConnectSheet(p, onDone = { connect = null; scope.launch { load() } })
     }
-    if (kamihub) KamihubSheet(onDone = { kamihub = false; scope.launch { load() } })
+    if (kamihub) AtmoKamiHubSheet(onDone = { kamihub = false; scope.launch { load() } })
     if (ninerouter) NineRouterSheet(nav, onDone = { ninerouter = false; scope.launch { load() } })
     disconnect?.let { id ->
         OcDialog("Disconnect $id?", { disconnect = null }, "Disconnect", {
@@ -205,10 +205,10 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
 }
 
 @Composable
-private fun KamihubSheet(onDone: () -> Unit) {
+private fun AtmoKamiHubSheet(onDone: () -> Unit) {
     val c = Oc.c
     val scope = rememberCoroutineScope()
-    val p = com.celoext.data.CustomProviders.KAMIHUB
+    val p = com.celoext.data.CustomProviders.ATMOKAMIHUB
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }

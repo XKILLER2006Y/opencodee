@@ -23,38 +23,43 @@ object CustomProviders {
         val preferredModel: String = exampleModel,
         /** Registered when the gateway can't list its models (an outage, or /models returning 500). */
         val fallbackModels: List<Pair<String, Int>> = emptyList(),
+        /** Reasoning effort variants advertised for every model of this provider, or null when none. */
+        val reasoningEfforts: List<String>? = null,
     )
 
-    // The gateway prefixes every id with the upstream it routes to (kamihub/…, atmoro/…, gpt/…), and
-    // rejects the bare name with a 500. The list is only a fallback for when /models itself fails.
-    val KAMIHUB = Preset(
-        id = "kamihub",
-        name = "Kamihub",
+    // AtmoKamiHub: the gateway prefixes every id with the upstream it routes to (kamihub/…, atmoro/…),
+    // and rejects the bare name with a 500. The list is only a fallback for when /models itself fails.
+    val ATMOKAMIHUB = Preset(
+        id = "atmokamihub",
+        name = "AtmoKamiHub",
         baseUrl = "https://kamihub.us.ci/v1",
-        exampleModel = "kamihub/deepseek-v4.1-flash",
-        preferredModel = "kamihub/deepseek-v4.1-flash",
+        exampleModel = "kamihub/nibierouter",
+        preferredModel = "kamihub/nibierouter",
         fallbackModels = listOf(
-            "kamihub/solar-mini4" to 128_000,
-            "kamihub/longcat-2-5" to 128_000,
-            "kamihub/deepseek-v4.1-flash" to 128_000,
-            "kamihub/ernie-5-5-flash" to 128_000,
-            "kamihub/kilo-auto" to 128_000,
+            "kamihub/nibierouter" to 128_000,
+            "atmoro/mimotp/mimo-v2.6-flash" to 128_000,
             "atmoro/combo/pro" to 128_000,
+            "atmoro/mm/MiniMax-M3.1-Flash" to 1_000_000,
+            "atmoro/combo/flash-priority" to 128_000,
+            "atmoro/zai/glm-4.6v" to 128_000,
+            "atmoro/zai/glm-5.3-flash" to 1_000_000,
+            "atmoro/mm/MiniMax-M2.1" to 200_000,
             "atmoro/combo/glm-5-3-flash-ultra" to 1_000_000,
             "atmoro/cb/deepseek-v4.1-flash" to 128_000,
-            "atmoro/mimotp/mimo-v2.6-flash" to 128_000,
-            "atmoro/zai/glm-5.3-flash" to 1_000_000,
-            "atmoro/zai/glm-4.6v" to 128_000,
-            "atmoro/mm/MiniMax-M2.1" to 200_000,
-            "atmoro/mm/MiniMax-M3.1-Flash" to 1_000_000,
-            "atmoro/ali/kimi-k2.7-code" to 200_000,
-            "atmoro/atmoro/ali/qwen3.8-max" to 128_000,
             "atmoro/cx/gpt-6-luna" to 128_000,
-            "atmoro/mai/muse-spark-1.3-contributor" to 128_000,
-            "gpt/gpt-5.6-sol" to 128_000,
-            "gpt/gpt-6-astra" to 128_000,
-            "gpt/gpt-6.1-sol" to 128_000,
+            "atmoro/ali/kimi-k2.7-code" to 200_000,
+            "atmoro/mm/MiniMax-M3" to 200_000,
+            "atmoro/combo/deepseek-4-1-flash-priority" to 128_000,
+            "atmoro/combo/glm-5-3-priority" to 1_000_000,
+            "atmoro/atmoro/ali/qwen3.8-max" to 128_000,
+            "atmoro/ali/qwen3.8-max-0902" to 128_000,
+            "atmoro/grok/grok-4.5" to 128_000,
+            "atmoro/grok/grok-4.6" to 128_000,
+            "atmoro/cx/gpt-5.6-sol" to 128_000,
+            "atmoro/combo/grok-4-series" to 128_000,
+            "atmoro/grok/grok-4.7" to 128_000,
         ),
+        reasoningEfforts = listOf("low", "medium", "high", "max"),
     )
 
     /**
@@ -104,7 +109,7 @@ object CustomProviders {
         }
         val model = chosen ?: p.preferredModel
         // The chosen model must exist in the registered list even when /models didn't return it.
-        if (!models.has(model)) models.put(model, modelEntry(model, 128_000, 8192))
+        if (!models.has(model)) models.put(model, modelEntry(model, 128_000, 8192, p.reasoningEfforts))
         val block = JSONObject()
             .put("name", p.name)
             // OpenCode 2.x uses the native provider package and `settings`, not the V1 npm/options shape.
@@ -153,19 +158,21 @@ object CustomProviders {
         }
     }
 
-    private fun modelEntry(id: String, context: Int, output: Int) = JSONObject()
+    private fun modelEntry(id: String, context: Int, output: Int, efforts: List<String>? = null) = JSONObject()
         .put("name", id)
         .put("capabilities", JSONObject()
             .put("tools", true)
             .put("input", org.json.JSONArray(listOf("text")))
             .put("output", org.json.JSONArray(listOf("text")))
-            .put("reasoning", JSONObject().put("supported", false)))
+            .put("reasoning", JSONObject()
+                .put("supported", efforts != null)
+                .put("effort", org.json.JSONArray(efforts ?: emptyList<String>()))))
         .put("limit", JSONObject().put("context", context).put("output", output))
 
     private fun fallback(p: Preset): JSONObject {
         val ids = p.fallbackModels.ifEmpty { listOf(p.exampleModel to 128_000) }
         return JSONObject().apply {
-            ids.forEach { (id, ctx) -> put(id, modelEntry(id, ctx, minOf(8192, ctx))) }
+            ids.forEach { (id, ctx) -> put(id, modelEntry(id, ctx, minOf(8192, ctx), p.reasoningEfforts)) }
         }
     }
 
@@ -212,7 +219,7 @@ object CustomProviders {
             val m = data.optJSONObject(i) ?: continue
             val id = m.optString("id").takeIf { it.isNotBlank() } ?: continue
             val ctx = m.optInt("context_length", m.optInt("context_window", 128_000)).takeIf { it > 0 } ?: 128_000
-            out.put(id, modelEntry(id, ctx, minOf(8192, ctx)))
+            out.put(id, modelEntry(id, ctx, minOf(8192, ctx), p.reasoningEfforts))
         }
         return out.takeIf { it.length() > 0 }
     }
