@@ -5,10 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.os.IBinder
-import android.os.PowerManager
+import androidx.compose.runtime.snapshotFlow
 import com.celoext.Graph
 import com.celoext.MainActivity
 import com.celoext.R
@@ -18,6 +17,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /** Foreground service that hosts the `opencode serve` process. */
@@ -31,7 +32,7 @@ class ServerService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
-    private var wake: PowerManager.WakeLock? = null
+    private val wake by lazy { WorkWake(this, scope, "ocmobile:server") }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -42,10 +43,6 @@ class ServerService : Service() {
             Graph.runtime.stopServer()
             stopSelf()
             return START_NOT_STICKY
-        }
-        if (Graph.prefs.keepAwake && wake == null) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ocmobile:server").apply { setReferenceCounted(false); acquire() }
         }
         if (job == null) {
             job = scope.launch {
@@ -59,6 +56,7 @@ class ServerService : Service() {
                         getSystemService(NotificationManager::class.java).notify(ID, notification(text))
                     }
                 }
+                launch { followWork() }
                 Graph.runtime.supervise()
                 stopSelf()
             }
@@ -66,10 +64,27 @@ class ServerService : Service() {
         return START_STICKY
     }
 
+    /** Holds the CPU only while there is work; see [needsWakeLock]. */
+    private suspend fun followWork() {
+        combine(
+            Graph.runtime.state,
+            Graph.chats.statuses,
+            Graph.chats.sending,
+            snapshotFlow { Graph.prefs.keepAwake },
+        ) { state, statuses, sending, keepAwake ->
+            needsWakeLock(
+                keepAwake = keepAwake,
+                starting = state is RuntimeState.Starting || state is RuntimeState.Crashed,
+                busySessions = statuses.size,
+                sendsInFlight = sending,
+            )
+        }.distinctUntilChanged().collect { wake.setWork(it) }
+    }
+
     override fun onDestroy() {
         Graph.runtime.requestStop()
+        wake.close()
         scope.cancel()
-        wake?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
 

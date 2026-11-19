@@ -41,6 +41,11 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     val permissions = MutableStateFlow<List<PermissionReq>>(emptyList())
     val questions = MutableStateFlow<List<QuestionReq>>(emptyList())
     val loaded = MutableStateFlow(false)
+    /**
+     * Prompts whose request has not returned yet. Covers the gap between Send and the first busy
+     * event, which is the only moment where the app is working and no session looks busy yet.
+     */
+    val sending = MutableStateFlow(0)
     /** Why sessions are retrying: free-tier limit, provider error and so on. */
     val retries = MutableStateFlow<Map<String, RetryInfo>>(emptyMap())
     val toasts = MutableSharedFlow<String>(extraBufferCapacity = 8)
@@ -351,7 +356,12 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             // in the CeloAgents look the agent is the CeloAgents cloud (Persona), unless turned off
             // anonymous chat: tell the agent not to remember anything from it
             val anon = if (isIncognito(sessionId)) "This is an anonymous chat. Do not save anything from it to memory, notes or files outside the task." else null
-            api.promptAsync(sessionId, dir, parts, prefs.providerId, prefs.modelId, prefs.agent, prefs.variant, listOfNotNull(Persona.instruction(), team, anon).joinToString("\n\n").ifBlank { null })
+            sending.update { it + 1 }
+            try {
+                api.promptAsync(sessionId, dir, parts, prefs.providerId, prefs.modelId, prefs.agent, prefs.variant, listOfNotNull(Persona.instruction(), team, anon).joinToString("\n\n").ifBlank { null })
+            } finally {
+                sending.update { it - 1 }
+            }
         } catch (e: Exception) {
             localId?.let { chat(sessionId).dropLocal(it) }
             throw e
