@@ -86,6 +86,20 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
     }
 
     fun start() {
+        // The last list is on disk: show it at once instead of an empty screen while proot and the
+        // local server start. The first refresh replaces it, and a device switch clears it.
+        Graph.scope.launch(Dispatchers.IO) {
+            val cached = SessionCache.load()
+            if (cached.isEmpty()) return@launch
+            withContext(Dispatchers.Main) {
+                // A refresh may have finished first (even with an empty list): the cache must not
+                // overwrite what the server just said.
+                if (all.value.isNotEmpty() || loaded.value) return@withContext
+                all.value = cached.associateBy { it.id }
+                publish()
+                loaded.value = true
+            }
+        }
         // Incognito sessions don't survive a restart: leftovers are deleted on start.
         Graph.scope.launch {
             delay(4000)
@@ -96,6 +110,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             Graph.devices.activeId.drop(1).collect {
                 chats.clear(); all.value = emptyMap(); sessions.value = emptyList(); statuses.value = emptyMap()
                 permissions.value = emptyList(); questions.value = emptyList(); retries.value = emptyMap(); loaded.value = false
+                Graph.scope.launch(Dispatchers.IO) { SessionCache.clear() }
             }
         }
         // A throwing handler ends the collector for good, and with it every later status update in
@@ -157,6 +172,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                 all.value = list.associateBy { it.id }
                 publish()
                 loaded.value = true
+                saveCache()
             } else if (loaded.value) {
                 // Empty reply is usually server warmup noise. Keep the last good list on screen.
                 return
@@ -205,6 +221,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
         chats.remove(id)
         all.update { it - id }
         publish()
+        saveCache()
     }
 
     private fun publish() {
@@ -212,6 +229,16 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
         sessions.value = all.value.values
             .filter { it.parentID == null && it.time.archived == null && it.id !in hidden }
             .sortedByDescending { it.time.updated }
+    }
+
+    /**
+     * Writes the visible list for the next cold start. Called after a refresh and after a delete,
+     * not on every session update: titles and costs change often, and losing the last few seconds of
+     * them costs nothing because the first refresh corrects the list.
+     */
+    private fun saveCache() {
+        val list = sessions.value
+        Graph.scope.launch(Dispatchers.IO) { SessionCache.save(list) }
     }
 
     private fun upsert(s: Session) {
@@ -226,7 +253,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             "session.created", "session.updated" -> p.obj("info")?.let { infoObj ->
                 runCatching { parseSession(infoObj) }.getOrNull()?.let(::upsert)
             }
-            "session.deleted" -> p.obj("info")?.str("id")?.let { id -> all.update { it - id }; publish() }
+            "session.deleted" -> p.obj("info")?.str("id")?.let { id -> all.update { it - id }; publish(); saveCache() }
             "session.status" -> {
                 val id = p.str("sessionID") ?: return
                 val t = p.obj("status")?.str("type") ?: return

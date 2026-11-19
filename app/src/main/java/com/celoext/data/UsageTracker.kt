@@ -60,14 +60,19 @@ class UsageTracker(
     val refreshing = MutableStateFlow(false)
 
     fun start() {
-        load()
-        snapshot.value = compute()
-        Graph.scope.launch {
-            events.events.collect { e ->
-                if (e.type == "message.updated" && !Graph.devices.isRemote) e.props.obj("info")?.let { record(it); }
+        // usage.json holds up to 35 days of replies; parsing it on the way to the first frame
+        // delayed the UI for no reason. Load first, then subscribe, so a live record that arrives
+        // during the read cannot be overwritten by an older one from the file.
+        Graph.scope.launch(Dispatchers.IO) {
+            load()
+            snapshot.value = compute()
+            Graph.scope.launch {
+                events.events.collect { e ->
+                    if (e.type == "message.updated" && !Graph.devices.isRemote) e.props.obj("info")?.let { record(it); }
+                }
             }
+            Graph.scope.launch { events.generation.collect { if (it > 0 && !Graph.devices.isRemote) backfill() } }
         }
-        Graph.scope.launch { events.generation.collect { if (it > 0 && !Graph.devices.isRemote) backfill() } }
     }
 
     private fun record(info: JsonObject, publish: Boolean = true) {
