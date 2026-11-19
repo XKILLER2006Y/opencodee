@@ -47,7 +47,7 @@ fun SetupScreen(rt: RuntimeState) {
         Spacer(Modifier.height(14.dp))
         Txt(
             "The agent runs in a Linux container right on your device — no computer needed. " +
-                "Setup downloads about 110 MB once.",
+                "Setup downloads about 300 MB and needs about 1.5 GB of free space.",
             size = 16.sp, color = c.textDim, align = TextAlign.Center, lineHeight = 23.sp,
         )
         Spacer(Modifier.height(32.dp))
@@ -60,6 +60,11 @@ fun SetupScreen(rt: RuntimeState) {
             }
             is RuntimeState.InstallFailed -> {
                 Txt(rt.message, size = 15.sp, color = c.danger, align = TextAlign.Center)
+                Txt(
+                    "Downloads resume where they stopped. Check the connection and free space, then try again.",
+                    size = 14.sp, color = c.textDim, align = TextAlign.Center, lineHeight = 20.sp,
+                    modifier = Modifier.padding(top = 10.dp),
+                )
                 Spacer(Modifier.height(20.dp))
                 Pill("Try again", { scope.launch { Graph.runtime.install() } })
             }
