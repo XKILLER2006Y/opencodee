@@ -2,6 +2,7 @@ package com.celoext.api
 
 import com.celoext.Graph
 import com.celoext.data.Prefs
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -47,6 +48,9 @@ class OpenCodeApi(private val prefs: Prefs) {
          * heartbeat interval, otherwise a healthy stream is torn down and reloaded again and again.
          */
         const val STREAM_READ_TIMEOUT = 30L
+
+        /** Attempts for a read: one try plus two retries, enough to ride out a Wi-Fi hiccup. */
+        const val CALL_ATTEMPTS = 3
     }
 
     val baseUrl get() = Graph.devices.active()?.url ?: "http://127.0.0.1:${prefs.serverPort}"
@@ -91,11 +95,25 @@ class OpenCodeApi(private val prefs: Prefs) {
         val rb = body?.let { OcJson.encodeToString(JsonElement.serializer(), it).toRequestBody(jsonType) }
             ?: if (method == "GET" || method == "DELETE" && body == null) null else "{}".toRequestBody(jsonType)
         val req = request(path, query).method(method, rb).build()
-        return http.newCall(req).await().use { r ->
-            val text = withContext(Dispatchers.IO) { r.body.string() }
-            if (!r.isSuccessful) throw ApiException(r.code, errorText(text, r.code))
-            if (text.isBlank()) null else runCatching { OcJson.parseToJsonElement(text) }.getOrNull()
+        var attempt = 0
+        while (true) {
+            try {
+                return attemptJson(req)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // One dropped packet used to fail a whole screen load, and the list stayed empty
+                // until the user pulled to refresh. Reads are safe to repeat; writes are not.
+                if (!isRetryableCall(method, e) || ++attempt >= CALL_ATTEMPTS) throw e
+                delay(retryDelay(attempt))
+            }
         }
+    }
+
+    private suspend fun attemptJson(req: Request): JsonElement? = http.newCall(req).await().use { r ->
+        val text = withContext(Dispatchers.IO) { r.body.string() }
+        if (!r.isSuccessful) throw ApiException(r.code, errorText(text, r.code))
+        if (text.isBlank()) null else runCatching { OcJson.parseToJsonElement(text) }.getOrNull()
     }
 
     private suspend fun callRaw(
@@ -701,3 +719,24 @@ internal fun configFilePath(entries: List<JsonObject>): String {
         ?: runCatching { com.celoext.Graph.paths.serverPath("/root/.config/opencode") }.getOrDefault("/root/.config/opencode")
     return java.io.File(dir, "opencode.json").path
 }
+
+/**
+ * Whether [e] is worth another try. Only reads are repeated: a prompt, a permission reply or a
+ * config patch must never run twice. An HTTP error is the server answering, so it is final, with
+ * the exception of the gateway codes a server returns while it is still starting. A refused or
+ * unresolvable connection is not retried either: waiting 250 ms does not bring it back, and three
+ * connect timeouts in a row would stall the screen for 15 s instead of 5.
+ */
+internal fun isRetryableCall(method: String, e: Throwable): Boolean {
+    if (method != "GET") return false
+    return when (e) {
+        is ApiException -> e.code == 502 || e.code == 503 || e.code == 504
+        is java.net.ConnectException, is java.net.UnknownHostException -> false
+        is IOException -> true
+        else -> false
+    }
+}
+
+/** Wait before retry [attempt] (1-based): 250 ms, then 500 ms. */
+internal fun retryDelay(attempt: Int): Long = 250L * attempt
+
