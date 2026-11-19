@@ -207,7 +207,12 @@ class RuntimeController(
      */
     private fun migrateLegacyHome() {
         val oldRoot = File(paths.rootfs, "root")
-        val marker = File(paths.nativeHome, ".migrated-from-rootfs")
+        // The marker sits next to the rootfs, outside the native directory a reset deletes. Inside it,
+        // every reset would make the next install copy the stale proot home back over a fresh one.
+        val marker = File(paths.rootfs.parentFile, ".migrated-from-rootfs")
+        val oldMarker = File(paths.nativeHome, ".migrated-from-rootfs")
+        // An install from before the marker moved still counts; do not copy again for those users.
+        if (oldMarker.exists() && !marker.exists()) runCatching { marker.writeText("1") }
         if (marker.exists() || !oldRoot.isDirectory || oldRoot.list()?.isNotEmpty() != true) return
         logLine("migrating the old /root into the native home")
         paths.nativeHome.mkdirs()
