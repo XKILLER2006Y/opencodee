@@ -47,6 +47,8 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
 
     /** Bumped on every live status change, so a slow refresh can tell whether its data is still current. */
     private val statusEpoch = java.util.concurrent.atomic.AtomicLong(0)
+    /** Session id → epoch of its newest live status event. Tells "no event" apart from "went idle". */
+    private val liveAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
 
     private val chats = HashMap<String, Chat>()
 
@@ -159,7 +161,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             permissions.value = manual
             auto.forEach { r -> Graph.scope.launch { runCatching { api.replyPermission(r.id, session(r.sessionID)?.directory, "once", r.sessionID) } } }
             questions.value = qs
-            val merged = mergeStatuses(statuses.value, st, epoch == statusEpoch.get())
+            val merged = mergeStatuses(statuses.value, st, liveAt.filterValues { it > epoch })
             findInterrupted(merged.keys)
             statuses.value = merged
             saveBusy()
@@ -205,7 +207,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                 val t = p.obj("status")?.str("type") ?: return
                 val was = statuses.value[id]
                 statuses.update { if (t == "idle") it - id else it + (id to t) }
-                statusEpoch.incrementAndGet()
+                liveAt[id] = statusEpoch.incrementAndGet()
                 saveBusy()
                 if (t != "idle" && id in interrupted.value) dismissInterrupted(id)
                 if (t == "idle" && was != null) finished(id)
@@ -219,7 +221,7 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
             "session.idle" -> p.str("sessionID")?.let { id ->
                 val was = statuses.value[id]
                 statuses.update { it - id }
-                statusEpoch.incrementAndGet()
+                liveAt[id] = statusEpoch.incrementAndGet()
                 saveBusy()
                 if (was != null) finished(id)
                 Graph.scope.launch {
@@ -445,14 +447,20 @@ data class RetryInfo(val message: String, val label: String?, val link: String?,
 
 /**
  * Statuses from a session-list refresh against the ones live events produced meanwhile.
- * `unchanged` means no event arrived during the refresh, so the snapshot is the newest truth.
+ * [live] holds the sessions that changed after the refresh started; their values are newer than
+ * the snapshot and win. Every other session is taken from the snapshot, which also lets a session
+ * that really disappeared drop out. An empty [live] means the snapshot is entirely current.
  */
 internal fun mergeStatuses(
     current: Map<String, String>,
     fetched: Map<String, String>,
-    unchanged: Boolean,
-): Map<String, String> =
-    if (unchanged) fetched else current + fetched.filterKeys { it !in current }
+    live: Map<String, Long>,
+): Map<String, String> {
+    if (live.isEmpty()) return fetched
+    val merged = current.toMutableMap()
+    fetched.forEach { (id, status) -> if (id !in live) merged[id] = status }
+    return merged
+}
 
 data class Attachment(val uri: Uri, val mime: String, val name: String) {
     val isImage get() = mime.startsWith("image/")

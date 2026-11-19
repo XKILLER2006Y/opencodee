@@ -11,27 +11,29 @@ import org.junit.Test
  * kept showing "working" after the reply had finished.
  */
 class StatusMergeTest {
+    private val busyA = mapOf("ses_a" to "busy")
+
     @Test fun withoutLiveEventsTheSnapshotWins() {
-        val current = mapOf("ses_a" to "busy")
         val fetched = mapOf("ses_b" to "busy")
-        assertEquals(fetched, mergeStatuses(current, fetched, unchanged = true))
+        assertEquals(fetched, mergeStatuses(busyA, fetched, emptyMap()))
     }
 
     @Test fun aSessionThatWentBusyDuringTheFetchKeepsItsLiveStatus() {
-        val current = mapOf("ses_a" to "busy")
-        val fetched = emptyMap<String, String>()
-        assertEquals(mapOf("ses_a" to "busy"), mergeStatuses(current, fetched, unchanged = false))
+        assertEquals(busyA, mergeStatuses(busyA, emptyMap(), mapOf("ses_a" to 5L)))
     }
 
     @Test fun aSessionThatWentIdleDuringTheFetchIsNotRevived() {
-        val current = emptyMap<String, String>()
-        val fetched = mapOf("ses_a" to "busy")
-        assertEquals(emptyMap<String, String>(), mergeStatuses(current, fetched, unchanged = false))
+        // "idle" means the id is absent from the live map, so a stale "busy" from the snapshot must not come back
+        assertEquals(emptyMap<String, String>(), mergeStatuses(emptyMap(), busyA, mapOf("ses_a" to 5L)))
     }
 
     @Test fun sessionsWithNoLiveEventStillComeFromTheFetch() {
-        val current = mapOf("ses_a" to "busy")
         val fetched = mapOf("ses_b" to "busy")
-        assertEquals(mapOf("ses_a" to "busy", "ses_b" to "busy"), mergeStatuses(current, fetched, unchanged = false))
+        assertEquals(busyA + fetched, mergeStatuses(busyA, fetched, mapOf("ses_a" to 5L)))
+    }
+
+    @Test fun aSnapshotCannotBringBackASessionThatWasNotTouched() {
+        // nothing arrived live: the snapshot is the truth, including a session that is gone now
+        assertEquals(mapOf("ses_b" to "busy"), mergeStatuses(mapOf("ses_gone" to "busy"), mapOf("ses_b" to "busy"), emptyMap()))
     }
 }
