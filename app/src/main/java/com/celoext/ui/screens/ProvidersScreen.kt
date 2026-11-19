@@ -30,6 +30,7 @@ import com.celoext.Graph
 import com.celoext.api.AllProvider
 import com.celoext.api.AuthMethod
 import com.celoext.api.str
+import com.celoext.runtime.RuntimeState
 import com.celoext.ui.Nav
 import com.celoext.ui.components.Chip
 import com.celoext.ui.components.IconBtn
@@ -46,9 +47,17 @@ import com.celoext.ui.components.TopBar
 import com.celoext.ui.components.Txt
 import com.celoext.ui.theme.Ic
 import com.celoext.ui.theme.Oc
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 private val popular = listOf("opencode-go", "opencode", "anthropic", "openai", "github-copilot", "google", "openrouter", "xai", "deepseek", "groq", "mistral", "zai", "moonshotai")
+
+/**
+ * Providers live on the server, local or remote. When the local one is still booting, a call fails
+ * with a socket error ("Failed to connect to /127.0.0.1:4096") that says nothing to the user, and
+ * the screen used to end up empty with no way to tell why.
+ */
+private fun serverUp(): Boolean = Graph.devices.isRemote || Graph.runtime.state.value is RuntimeState.Running
 
 @Composable
 fun ProvidersScreen(nav: Nav) {
@@ -65,6 +74,17 @@ fun ProvidersScreen(nav: Nav) {
 
     suspend fun load() { all = runCatching { Graph.api.allProviders().all }.getOrDefault(emptyList()); loading = false }
     LaunchedEffect(Unit) { load() }
+
+    // Opening this screen during boot used to leave the list empty for good: the request had failed
+    // while the server was still starting and nothing tried again. The user saw no providers at all
+    // and could not add a key.
+    val rt by Graph.runtime.state.collectAsState()
+    LaunchedEffect(rt) {
+        if (rt !is RuntimeState.Running) return@LaunchedEffect
+        var tries = 0
+        while (all.isEmpty() && tries < 5) { delay(600); load(); tries++ }
+    }
+    val serverDown = !serverUp()
 
     val connectedIds = connected.map { it.id }.toSet()
     val kami = com.celoext.data.CustomProviders.ATMOKAMIHUB
@@ -103,6 +123,12 @@ fun ProvidersScreen(nav: Nav) {
                 Spacer(Modifier.height(12.dp))
             }
             if (loading) item { Box(Modifier.fillMaxWidth().padding(24.dp)) { Spinner(26.dp) } }
+            if (!loading && all.isEmpty() && serverDown) item {
+                Txt(
+                    "The provider list comes from the local server and it is not running yet. Start it in Settings → Local server, then come back to this screen.",
+                    Modifier.padding(horizontal = 20.dp, vertical = 6.dp), size = 15.sp, color = c.textDim, lineHeight = 21.sp,
+                )
+            }
             item {
                 SettingsGroup {
                     if (showKamihub) SettingsRow(kami.name, subtitle = "kamihub.us.ci · OpenAI-compatible", icon = Ic.Plus, chevron = true, onClick = { kamihub = true })
@@ -166,7 +192,9 @@ private fun ConnectSheet(p: AllProvider, onDone: () -> Unit) {
                     Pill(if (busy) "Connecting…" else "Connect", {
                         busy = true; error = null
                         scope.launch {
-                            runCatching { Graph.api.setApiKey(p.id, key.trim()) }.onSuccess { finish() }.onFailure { error = it.message }
+                            runCatching { Graph.api.setApiKey(p.id, key.trim()) }.onSuccess { finish() }.onFailure { e ->
+                                error = if (serverUp()) e.message else "The local server is not running yet. Start it in Settings → Local server, then try again."
+                            }
                             busy = false
                         }
                     }, enabled = key.isNotBlank() && !busy, modifier = Modifier.fillMaxWidth())
