@@ -215,7 +215,8 @@ fun ServerScreen(nav: Nav) {
     if (showAppLog) LogSheet(appLog, "App log") { showAppLog = false }
     tools?.let { lines -> LogSheet(lines, "Installing tools") { tools = null } }
     if (reset) OcDialog("Reset environment?", { reset = false }, "Reset", {
-        reset = false; Graph.runtime.resetRuntime()
+        reset = false
+        if (!Graph.runtime.resetRuntime()) Graph.chats.toasts.tryEmit("An install is still running. Wait for it to finish, then reset.")
     }, danger = true) { Txt("The environment, OpenCode and all projects under /root will be deleted. Sessions history is lost too.", size = 16.sp, color = Oc.c.textDim) }
 }
 

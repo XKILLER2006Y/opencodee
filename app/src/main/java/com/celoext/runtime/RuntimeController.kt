@@ -57,8 +57,7 @@ class RuntimeController(
     private val proot = ProotCommand(paths, prefs)
     @Volatile private var process: Process? = null
     @Volatile private var stopRequested = false
-    @Volatile private var installing = false
-    @Volatile private var resetting = false
+    private val ops = RuntimeOps()
     private val supervising = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun logLine(s: String) {
@@ -69,8 +68,7 @@ class RuntimeController(
     // ---------- install ----------
 
     suspend fun install() = withContext(Dispatchers.IO) {
-        if (installing || resetting) return@withContext
-        installing = true
+        if (!ops.beginInstall()) return@withContext
         try {
             // Rootfs (~800 MB) + OpenCode (~240 MB) + downloads: fail early with a clear message instead of ENOSPC.
             val root = paths.rootfs.parentFile ?: paths.rootfs
@@ -109,7 +107,7 @@ class RuntimeController(
             logLine("Install failed: ${e.message}")
             state.value = RuntimeState.InstallFailed(e.message ?: e.javaClass.simpleName)
         } finally {
-            installing = false
+            ops.endInstall()
         }
     }
 
@@ -289,7 +287,10 @@ class RuntimeController(
     suspend fun supervise() = withContext(Dispatchers.IO) {
         // Two loops (the service got recreated while the old loop was still winding down) take turns
         // killing each other's server and crash-loop on "port 4096 in use". Only one may run.
-        if (!supervising.compareAndSet(false, true)) return@withContext
+        if (!beginSupervising()) {
+            logLine("Another server loop is still running; not starting a second one")
+            return@withContext
+        }
         try {
             superviseLoop()
         } finally {
@@ -297,7 +298,29 @@ class RuntimeController(
         }
     }
 
+    /**
+     * Takes the single-loop slot. A service restart can arrive while the previous loop is still
+     * being cancelled, so wait for it instead of returning: the caller stops the service right
+     * after, and giving up here leaves the server down until Android retries the sticky service.
+     */
+    private suspend fun beginSupervising(): Boolean {
+        if (supervising.compareAndSet(false, true)) return true
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            delay(100)
+            if (supervising.compareAndSet(false, true)) return true
+        }
+        return false
+    }
+
     private suspend fun superviseLoop() = withContext(Dispatchers.IO) {
+        // A wiped or half-removed runtime must not turn into a crash/restart loop: there is nothing
+        // to execute, so every attempt fails the same way and the user only sees "Server crashed".
+        if (!paths.nativeReady) {
+            logLine("The native runtime is missing; install it again")
+            state.value = RuntimeState.NotInstalled
+            return@withContext
+        }
         stopRequested = false
         var failures = 0
         var windowStart = System.currentTimeMillis()
@@ -460,9 +483,14 @@ class RuntimeController(
 
     /** Start the server through a foreground service, otherwise Android kills the process in the background. */
     fun startServer() {
-        if (resetting) return
+        if (ops.resetting) return
         val s = state.value
         if (s is RuntimeState.NotInstalled || s is RuntimeState.Installing || s is RuntimeState.InstallFailed) return
+        if (!paths.nativeReady) {
+            logLine("The native runtime is missing; install it again")
+            state.value = RuntimeState.NotInstalled
+            return
+        }
         userStopped = false
         ContextCompat.startForegroundService(app, Intent(app, ServerService::class.java).setAction(ServerService.ACTION_START))
     }
@@ -496,9 +524,15 @@ class RuntimeController(
         return runGuest(listOf("/bin/bash", "-lc", script), onLine = onLine)
     }
 
-    fun resetRuntime() {
-        if (resetting) return
-        resetting = true
+    /**
+     * Deletes the native runtime. Returns false when an install is still running: both write the
+     * same directories, and a reset in the middle of one leaves the ready flag over an empty tree.
+     */
+    fun resetRuntime(): Boolean {
+        if (!ops.beginReset()) {
+            logLine("Reset skipped: an install is still running")
+            return false
+        }
         // Deleting the environment is hundreds of megabytes and thousands of files: not on the main thread.
         Thread {
             try {
@@ -513,9 +547,10 @@ class RuntimeController(
                 paths.downloads.deleteRecursively()
                 prefs.runtimeReady = false
             } finally {
-                resetting = false
+                ops.endReset()
                 state.value = RuntimeState.NotInstalled
             }
         }.apply { isDaemon = true }.start()
+        return true
     }
 }
