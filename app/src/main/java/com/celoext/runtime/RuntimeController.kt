@@ -1,5 +1,6 @@
 package com.celoext.runtime
 
+import com.celoext.DeviceProbe
 import com.celoext.data.Vault
 import android.app.Application
 import android.content.Intent
@@ -121,7 +122,20 @@ class RuntimeController(
             state.value = RuntimeState.InstallFailed(e.message ?: e.javaClass.simpleName)
         } finally {
             ops.endInstall()
+            DeviceProbe.write(app, "oc-install", installReport())
         }
+    }
+
+    /** Test build only: the state of the runtime right after an install, readable from Downloads. */
+    private fun installReport(): String = buildString {
+        appendLine("state=${state.value}")
+        appendLine("bundleVersion=${runCatching { paths.bundleVersionFile.readText().trim() }.getOrElse { "missing" }}")
+        appendLine("nativeBin=${paths.opencodeNativeBin.isFile} exec=${runCatching { paths.opencodeNativeBin.canExecute() }.getOrDefault(false)}")
+        appendLine("bun=${File(paths.nativeBin, "bun").isFile}")
+        appendLine("markers=${paths.debMarkers.list()?.joinToString() ?: "none"}")
+        appendLine("runtimeReady=${prefs.runtimeReady}")
+        appendLine("log:")
+        append(log.value.joinToString("\n"))
     }
 
     /**
@@ -426,6 +440,7 @@ class RuntimeController(
                 if (version != null) {
                     state.value = RuntimeState.Running(version)
                     prefs.opencodeVersion = version
+                    DeviceProbe.write(app, "oc-server", "running $version on port ${prefs.serverPort}\n")
                     failures = 0
                 }
                 // Watchdog: the process is alive but not answering (hung), so restart it instead of waiting forever.
