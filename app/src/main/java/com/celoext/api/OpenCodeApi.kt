@@ -40,6 +40,13 @@ class OpenCodeApi(private val prefs: Prefs) {
         /** The server rejects any `limit` above 200 ("Expected a value less than or equal to 200"), so never send more. */
         const val MAX_LIMIT = 200
         fun pageLimit(n: Int) = n.coerceIn(1, MAX_LIMIT)
+
+        /**
+         * SSE has no keepalive of its own and OkHttp's pingInterval only applies to WebSockets, so
+         * this is what notices a stream that died without closing. It must stay above the server's
+         * heartbeat interval, otherwise a healthy stream is torn down and reloaded again and again.
+         */
+        const val STREAM_READ_TIMEOUT = 30L
     }
 
     val baseUrl get() = Graph.devices.active()?.url ?: "http://127.0.0.1:${prefs.serverPort}"
@@ -52,8 +59,8 @@ class OpenCodeApi(private val prefs: Prefs) {
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    /** SSE client: the server sends heartbeats, 30 s silence triggers reconnect. */
-    val streamHttp: OkHttpClient = http.newBuilder().readTimeout(30, TimeUnit.SECONDS).pingInterval(20, TimeUnit.SECONDS).build()
+    /** SSE client: the server sends heartbeats, [STREAM_READ_TIMEOUT] seconds of silence triggers reconnect. */
+    val streamHttp: OkHttpClient = http.newBuilder().readTimeout(STREAM_READ_TIMEOUT, TimeUnit.SECONDS).build()
 
     private val permissionSessions = ConcurrentHashMap<String, String>()
     private val formCache = ConcurrentHashMap<String, JsonObject>()

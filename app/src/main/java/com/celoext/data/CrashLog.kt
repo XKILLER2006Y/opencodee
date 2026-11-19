@@ -50,11 +50,28 @@ object CrashLog {
                 append('\n').append(stack)
             }
             lines.value = (lines.value + text).takeLast(MAX_ENTRIES)
-            val f = file ?: return
-            runCatching {
-                f.appendText(text + "\n")
-                if (f.length() > MAX_FILE_BYTES) f.writeText(lines.value.joinToString("\n") + "\n")
-            }
+            write(text)
+        }
+    }
+
+    /**
+     * Records something that went wrong but was handled, like a dropped connection that is being
+     * retried. No stack trace: the point is what happened, not where it was thrown.
+     */
+    fun note(where: String, message: String) {
+        runCatching { Log.w("CeloApp", "$where: $message") }
+        synchronized(lock) {
+            val text = "${stamp.format(Date())} $where: $message"
+            lines.value = (lines.value + text).takeLast(MAX_ENTRIES)
+            write(text)
+        }
+    }
+
+    private fun write(text: String) {
+        val f = file ?: return
+        runCatching {
+            f.appendText(text + "\n")
+            if (f.length() > MAX_FILE_BYTES) f.writeText(lines.value.joinToString("\n") + "\n")
         }
     }
 }
