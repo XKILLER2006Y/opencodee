@@ -50,7 +50,16 @@ object Attachments {
         val wantInline = (a.isImage && m?.supportsImages != false) || (a.mime == "application/pdf" && m?.capabilities?.input?.pdf == true)
         // Images are always recompressed (output is small). Everything else above the inline cap goes to disk.
         val inline = wantInline && (a.isImage || (size ?: 0) <= MAX_INLINE_BYTES)
-        if (inline) return toFilePart(ctx, a)
+        if (inline) {
+            // Sampling keeps the decode small, but a panorama or a 50 MP photo can still need more
+            // heap than the phone gives us, and send() only catches Exception: an OOM there took the
+            // whole app down. Fall back to the disk path so the message still goes out.
+            val part = runCatching { toFilePart(ctx, a) }
+            part.getOrNull()?.let { return it }
+            if (com.celoext.Graph.devices.isRemote) {
+                throw part.exceptionOrNull() as? Exception ?: java.io.IOException("Could not read ${a.name}")
+            }
+        }
 
         if (com.celoext.Graph.devices.isRemote) {
             if (!isTextLike(a.mime, a.name)) throw java.io.IOException("Only images and text files can be sent to a remote device")
@@ -218,8 +227,11 @@ object Attachments {
     private fun tryRecompress(ctx: Context, a: Attachment, bounds: BitmapFactory.Options?): ByteArray? {
         if (bounds == null) return null
         if (maxOf(bounds.outWidth, bounds.outHeight) <= MAX_EDGE) return null
-        var sample = 1
-        while (maxOf(bounds.outWidth, bounds.outHeight) / sample > MAX_EDGE * 2) sample *= 2
+        // A 12 MP camera photo is 4000x3000: decoded at full size that is a 48 MB ARGB_8888 bitmap,
+        // and scaling it to 2048 allocates a second one. On the phones this app targets that pair
+        // was the largest single allocation in the process. Decode by sample instead, sized to a
+        // budget rather than to the target edge, so a tall screenshot keeps its width.
+        val sample = sampleSizeFor(bounds.outWidth, bounds.outHeight)
         var bmp = runCatching {
             ctx.contentResolver.openInputStream(a.uri)!!.use { input ->
                 val o = BitmapFactory.Options().apply { inSampleSize = sample }
@@ -240,9 +252,32 @@ object Attachments {
             } ?: 0f
         }.getOrDefault(0f)
         if (rotation != 0f) m.postRotate(rotation)
-        if (!m.isIdentity) bmp = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+        if (!m.isIdentity) {
+            val scaled = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            // Release the decode before the base64 copy of the result is made.
+            if (scaled !== bmp) bmp.recycle()
+            bmp = scaled
+        }
         val out = ByteArrayOutputStream()
-        bmp.compress(Bitmap.CompressFormat.JPEG, 86, out)
-        return out.toByteArray()
+        try {
+            bmp.compress(Bitmap.CompressFormat.JPEG, 86, out)
+            return out.toByteArray()
+        } finally {
+            bmp.recycle()
+        }
     }
+}
+
+/**
+ * Budget for the decoded bitmap in pixels: 4 MP of ARGB_8888 is 16 MB. A plain
+ * "max edge <= MAX_EDGE" rule would halve a 2400 px screenshot to 1200 and make its text
+ * unreadable for the model, so the limit is on total pixels and the width is kept.
+ */
+private const val MAX_DECODE_PIXELS = 4_000_000L
+
+/** Power-of-two sample for [BitmapFactory.Options.inSampleSize] that keeps the decode within budget. */
+internal fun sampleSizeFor(width: Int, height: Int, maxPixels: Long = MAX_DECODE_PIXELS): Int {
+    var sample = 1
+    while (sample < 64 && (width.toLong() / sample) * (height.toLong() / sample) > maxPixels) sample *= 2
+    return sample
 }
