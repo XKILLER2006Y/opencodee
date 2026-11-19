@@ -93,7 +93,13 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                 permissions.value = emptyList(); questions.value = emptyList(); retries.value = emptyMap(); loaded.value = false
             }
         }
-        Graph.scope.launch { events.events.collect(::handle) }
+        // A throwing handler ends the collector for good, and with it every later status update in
+        // the session. One malformed event must not do that.
+        Graph.scope.launch {
+            events.events.collect { e ->
+                runCatching { handle(e) }.onFailure { noteEventError(e.type, it) }
+            }
+        }
         Graph.scope.launch {
             events.generation.collect { g ->
                 if (g > 0) {
@@ -102,6 +108,20 @@ class ChatHub(private val api: OpenCodeApi, private val events: EventHub, privat
                 }
             }
         }
+    }
+
+    /**
+     * One line per failing event type per minute: a handler that breaks on every `message.part.delta`
+     * would otherwise write a stack trace per token and bury everything else in the app log.
+     */
+    private val eventErrorAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    private fun noteEventError(type: String, e: Throwable) {
+        val now = System.currentTimeMillis()
+        val last = eventErrorAt[type] ?: 0L
+        if (now - last < 60_000) return
+        eventErrorAt[type] = now
+        CrashLog.record("chat event $type", e)
     }
 
     fun session(id: String): Session? = all.value[id]
