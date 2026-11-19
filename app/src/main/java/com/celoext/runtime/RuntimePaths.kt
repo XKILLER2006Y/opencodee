@@ -28,6 +28,10 @@ class RuntimePaths(ctx: Context) {
     val bundleDir = File(native, "opencode")
     val opencodeBundle = File(bundleDir, "lib/opencode")
     val opencodeNativeBin = File(bundleDir, "bin/opencode")
+    /** Which opencode-termux release is unpacked, so an app update can replace an older bundle. */
+    val bundleVersionFile = File(native, "bundle-version")
+    /** One marker per Termux package, written after a complete unpack: a killed install is not "installed". */
+    val debMarkers = File(native, "debs")
     /** HOME / XDG base for the native server: /root inside the old layout maps onto this. */
     val nativeHome = File(native, "home")
     val globalAgentsMd = File(host("/root/.config/opencode"), "AGENTS.md")

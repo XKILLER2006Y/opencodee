@@ -149,6 +149,7 @@ fun ServerScreen(nav: Nav) {
     var showAppLog by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<List<String>?>(null) }
     var reset by remember { mutableStateOf(false) }
+    var reinstall by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().screenBackdrop("MoreScreens2")) {
         TopBar("Local server", left = { IconBtn(Ic.Back, { nav.pop() }) })
@@ -196,6 +197,7 @@ fun ServerScreen(nav: Nav) {
                         lines.add(if (code == 0) "✓ Done" else "✗ Failed (exit $code)")
                     }
                 })
+                SettingsRow("Reinstall OpenCode", subtitle = "Downloads the bundled runtime again; chats and projects are kept", icon = Ic.Refresh, onClick = { reinstall = true })
                 SettingsRow("App log", subtitle = "Errors from the app itself, sent with a bug report", icon = Ic.Warning, onClick = { showAppLog = true })
                 SettingsRow("Don't kill the server in background", subtitle = "Exempt the app from battery optimization", icon = Ic.Zap, onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -218,6 +220,10 @@ fun ServerScreen(nav: Nav) {
         reset = false
         if (!Graph.runtime.resetRuntime()) Graph.chats.toasts.tryEmit("An install is still running. Wait for it to finish, then reset.")
     }, danger = true) { Txt("The environment, OpenCode and all projects under /root will be deleted. Sessions history is lost too.", size = 16.sp, color = Oc.c.textDim) }
+    if (reinstall) OcDialog("Reinstall OpenCode?", { reinstall = false }, "Reinstall", {
+        reinstall = false
+        scope.launch { Graph.runtime.reinstallNative() }
+    }) { Txt("Downloads the bundled OpenCode and its packages again. The server stops while that happens. Chats and projects are kept.", size = 16.sp, color = Oc.c.textDim) }
 }
 
 @Composable

@@ -100,6 +100,8 @@ class RuntimeController(
             Memory.sync() // copies the default skills and writes their rules into AGENTS.md
             installNative()
             nativeSmokeTest()
+            // Written only after the bundle starts: a bundle that cannot run is replaced on the next try.
+            paths.bundleVersionFile.writeText(OCT_VERSION)
 
             prefs.runtimeReady = true
             state.value = RuntimeState.Stopped
@@ -115,19 +117,41 @@ class RuntimeController(
     }
 
     /**
+     * Re-download the bundled OpenCode and its Termux packages without touching chats or projects.
+     * This is how a new OCT_VERSION is picked up: a running server must stop first, because the
+     * bundle files under it are replaced.
+     */
+    suspend fun reinstallNative() {
+        if (ops.installing || ops.resetting) return
+        stopServer()
+        val deadline = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < deadline && (serverAlive || portBusy())) delay(200)
+        if (serverAlive || portBusy()) {
+            logLine("Reinstall skipped: the server did not stop")
+            return
+        }
+        install()
+    }
+
+    /**
      * Native runtime, no proot: the opencode-termux bundle (a sh launcher + the JS module graph +
      * bionic native libraries) plus the Termux packages it runs on — bun, libicu, ripgrep, pcre2.
      * Everything is downloaded with pinned sha-256s and unpacked with our own extractors.
      */
     private fun installNative() {
-        // Also redo a bundle that was extracted but never fully patched (an earlier install died half way):
-        // it would be reused as is and then fail at startup with placeholder paths.
-        if (paths.opencodeNativeBin.isFile &&
-            (!runCatching { File(paths.opencodeBundle, "index.js").isFile }.getOrDefault(false) || bundleHasPlaceholders())
-        ) {
-            paths.bundleDir.deleteRecursively()
-        }
-        if (!paths.opencodeNativeBin.isFile) {
+        // Redo a bundle that is missing, was extracted but never fully patched (an earlier install
+        // died half way), or came from an older opencode-termux release. The old check only looked
+        // at the launcher, so a new OCT_VERSION in an app update never replaced the old bundle.
+        val bundleVersion = runCatching { paths.bundleVersionFile.readText().trim() }.getOrNull()
+        val needsBundle = bundleNeedsInstall(
+            binExists = paths.opencodeNativeBin.isFile,
+            indexExists = File(paths.opencodeBundle, "index.js").isFile,
+            hasPlaceholders = bundleHasPlaceholders(),
+            installedVersion = bundleVersion,
+            wantedVersion = OCT_VERSION,
+        )
+        if (needsBundle) {
+            if (paths.bundleDir.exists()) logLine("bundle: replacing ${bundleVersion ?: "unknown version"} with $OCT_VERSION")
             step("Downloading OpenCode", 0f)
             val tgz = File(paths.downloads, "opencode-native-$OCT_VERSION.tar.gz")
             Downloader.fetch(octUrl(OCT_VERSION), tgz, OCT_SHA) { d, t -> step("Downloading OpenCode", frac(d, t), mb(d, t)) }
@@ -168,20 +192,23 @@ class RuntimeController(
         }
         // The Termux packages the bundle runs on. Nothing here is apt: pure downloads + unzip.
         val usrRoot = File(paths.nativeUsr, "data/data/com.termux/files/usr")
+        paths.debMarkers.mkdirs()
         for (deb in TERMUX_DEBS) {
-            val have = when (deb.name) {
-                "bun" -> File(usrRoot, "bin/bun").isFile
-                "libicu" -> File(usrRoot, "lib/libicuuc.so.79.1").isFile
-                "ripgrep" -> File(usrRoot, "bin/rg").isFile
-                "pcre2" -> File(usrRoot, "lib/libpcre2-8.so").isFile
-                else -> false
-            }
+            // A key file alone is not proof: an install killed mid-extraction leaves some files
+            // behind, and the old check then called the package installed forever, so the missing
+            // libraries were never restored and the server kept failing to start.
+            val marker = File(paths.debMarkers, "${deb.name}.sha")
+            val markerVersion = runCatching { marker.readText().trim() }.getOrNull()
+            val have = !debNeedsInstall(markerVersion, deb.sha, debKeyFilePresent(deb.name, usrRoot))
             if (have) { logLine("termux ${deb.name}: already installed"); continue }
             step("Downloading ${deb.name}", 0f)
             val f = File(paths.downloads, "${deb.name}-${deb.sha.take(8)}.deb")
             Downloader.fetch(deb.url, f, deb.sha) { d, t -> step("Downloading ${deb.name}", frac(d, t), mb(d, t)) }
             step("Installing ${deb.name}", 0f)
             val r = DebExtractor.extract(f, paths.nativeUsr) { d, t -> step("Installing ${deb.name}", frac(d, t)) }
+            // Written only after a complete unpack. A killed install leaves files but no marker, so
+            // the next run extracts the package again instead of trusting a half-written tree.
+            marker.writeText(deb.sha)
             logLine("termux ${deb.name}: ${r.files} files")
             f.delete()
         }
@@ -236,6 +263,15 @@ class RuntimeController(
 
     private fun bundleHasPlaceholders(): Boolean = bundleFiles().any { f ->
         runCatching { String(f.readBytes(), Charsets.ISO_8859_1).contains("@TERMUX_PREFIX@") }.getOrDefault(false)
+    }
+
+    /** One file that has to exist once a Termux package is unpacked; the marker proves it is complete. */
+    private fun debKeyFilePresent(name: String, usrRoot: File): Boolean = when (name) {
+        "bun" -> File(usrRoot, "bin/bun").isFile
+        "libicu" -> File(usrRoot, "lib/libicuuc.so.79.1").isFile
+        "ripgrep" -> File(usrRoot, "bin/rg").isFile
+        "pcre2" -> File(usrRoot, "lib/libpcre2-8.so").isFile
+        else -> false
     }
 
     /** The environment the native server runs with: XDG paths all live in the native home. */
@@ -629,3 +665,23 @@ internal fun shouldMigrateLegacyFile(
  */
 internal fun isServerCommand(cmd: String, nativeBinPath: String): Boolean =
     cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(nativeBinPath)
+
+/**
+ * Whether the OpenCode bundle on disk has to be downloaded again. A missing launcher or entry
+ * point, leftover `@TERMUX_PREFIX@` placeholders or an older version all mean yes. A bundle from
+ * before the version marker existed counts as older: its actual version is unknown.
+ */
+internal fun bundleNeedsInstall(
+    binExists: Boolean,
+    indexExists: Boolean,
+    hasPlaceholders: Boolean,
+    installedVersion: String?,
+    wantedVersion: String,
+): Boolean = !binExists || !indexExists || hasPlaceholders || installedVersion != wantedVersion
+
+/**
+ * Whether a Termux package has to be unpacked again. The marker proves the last unpack finished;
+ * a key file alone does not, because a killed install leaves part of the tree behind.
+ */
+internal fun debNeedsInstall(markerVersion: String?, wantedVersion: String, keyFileExists: Boolean): Boolean =
+    !keyFileExists || markerVersion != wantedVersion
