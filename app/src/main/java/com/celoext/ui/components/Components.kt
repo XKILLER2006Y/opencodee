@@ -17,14 +17,19 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -309,7 +314,7 @@ fun OcSheet(
         scrimColor = c.scrim,
         shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
     ) {
-        Column(Modifier.navigationBarsPadding()) {
+        Column(Modifier.windowInsetsPadding(WindowInsets.navigationBars.union(WindowInsets.ime))) {
             if (title != null) {
                 Box(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 12.dp)) {
                     IconBtn(if (onBack != null) Ic.Back else Ic.Close, onBack ?: onDismiss, Modifier.align(Alignment.CenterStart))
@@ -337,7 +342,7 @@ fun OcDialog(
         containerColor = c.surfaceHigh,
         shape = Oc.round(28.dp),
         title = { Txt(title, size = 24.sp) },
-        text = content,
+        text = { Column(Modifier.imePadding()) { content() } },
         confirmButton = {
             if (onConfirm != null) androidx.compose.material3.TextButton(onClick = onConfirm) {
                 Text(confirmText, color = if (danger) c.danger else c.accent, fontFamily = Oc.body)

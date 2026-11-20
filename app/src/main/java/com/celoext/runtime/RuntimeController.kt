@@ -39,13 +39,21 @@ class RuntimeController(
         const val OCT_VERSION = "2.2.7"
         const val OCT_SHA = "432c809a6e2dcb4ea08be79d96694b755c22129de10d07ff1abf2bebae4c8266"
         fun octUrl(v: String) = "https://github.com/$OCT_REPO/releases/download/v$v/opencode-$v-android-aarch64-bundle.tar.gz"
-        const val TERMUX = "https://packages.termux.dev/apt/termux-main/pool/main"
-        class Deb(val name: String, val url: String, val sha: String)
+        // Termux keeps only the latest build of each package, and the primary host drops the old
+        // files without warning (issue #10: bun 1.4.4-3 began returning 404). Every package stays
+        // pinned by sha256, and the first mirror that still has it serves the bytes.
+        val TERMUX_HOSTS = listOf(
+            "https://packages.termux.dev/apt/termux-main",
+            "https://packages-cf.termux.dev/apt/termux-main",
+        )
+        class Deb(val name: String, val path: String, val sha: String) {
+            val urls get() = TERMUX_HOSTS.map { "$it/$path" }
+        }
         val TERMUX_DEBS = listOf(
-            Deb("bun", "$TERMUX/b/bun/bun_1.4.4-3_aarch64.deb", "ceb20de1f3eff7cd1230d80d85e2d916611a89e90a93113d682d1d721591f4d8"),
-            Deb("libicu", "$TERMUX/libi/libicu/libicu_79.1_aarch64.deb", "83c980a010e957738e3567127801d66a1b9bd7e404a4fda98788048ee57d606c"),
-            Deb("ripgrep", "$TERMUX/r/ripgrep/ripgrep_15.2.0_aarch64.deb", "38e28bc297000517b24702568a483eca7dc3323eb6bdccc9033f031776bdcc6c"),
-            Deb("pcre2", "$TERMUX/p/pcre2/pcre2_10.49_aarch64.deb", "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"),
+            Deb("bun", "pool/main/b/bun/bun_1.4.5_aarch64.deb", "ebc12e294c3ee6dde21f8a78c1dd42f3304a599b68ebd074333838cff2d0e880"),
+            Deb("libicu", "pool/main/libi/libicu/libicu_79.1_aarch64.deb", "83c980a010e957738e3567127801d66a1b9bd7e404a4fda98788048ee57d606c"),
+            Deb("ripgrep", "pool/main/r/ripgrep/ripgrep_15.2.0_aarch64.deb", "38e28bc297000517b24702568a483eca7dc3323eb6bdccc9033f031776bdcc6c"),
+            Deb("pcre2", "pool/main/p/pcre2/pcre2_10.49_aarch64.deb", "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"),
         )
     }
 
@@ -57,8 +65,7 @@ class RuntimeController(
     private val proot = ProotCommand(paths, prefs)
     @Volatile private var process: Process? = null
     @Volatile private var stopRequested = false
-    @Volatile private var installing = false
-    @Volatile private var resetting = false
+    private val ops = RuntimeOps()
     private val supervising = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun logLine(s: String) {
@@ -69,8 +76,7 @@ class RuntimeController(
     // ---------- install ----------
 
     suspend fun install() = withContext(Dispatchers.IO) {
-        if (installing || resetting) return@withContext
-        installing = true
+        if (!ops.beginInstall()) return@withContext
         try {
             // Rootfs (~800 MB) + OpenCode (~240 MB) + downloads: fail early with a clear message instead of ENOSPC.
             val root = paths.rootfs.parentFile ?: paths.rootfs
@@ -91,14 +97,19 @@ class RuntimeController(
                 val r = TarExtractor.extract(tgz, paths.rootfs) { d, t -> step("Unpacking environment", frac(d, t)) }
                 logLine("rootfs: ${r.files} files, skipped ${r.skipped}")
                 configureRootfs()
-                prefs.seededSkills = "" // fresh Ubuntu: the default skills have to be copied in again
                 tgz.delete()
             }
 
+            migrateLegacyHome()
             Vault.restore()
+            // The native home is new even when the old proot home had the skills, so check them
+            // again: seed() keeps existing files and only copies the ones that are missing.
+            prefs.seededSkills = ""
             Memory.sync() // copies the default skills and writes their rules into AGENTS.md
             installNative()
             nativeSmokeTest()
+            // Written only after the bundle starts: a bundle that cannot run is replaced on the next try.
+            paths.bundleVersionFile.writeText(OCT_VERSION)
 
             prefs.runtimeReady = true
             state.value = RuntimeState.Stopped
@@ -109,8 +120,25 @@ class RuntimeController(
             logLine("Install failed: ${e.message}")
             state.value = RuntimeState.InstallFailed(e.message ?: e.javaClass.simpleName)
         } finally {
-            installing = false
+            ops.endInstall()
         }
+    }
+
+    /**
+     * Re-download the bundled OpenCode and its Termux packages without touching chats or projects.
+     * This is how a new OCT_VERSION is picked up: a running server must stop first, because the
+     * bundle files under it are replaced.
+     */
+    suspend fun reinstallNative() {
+        if (ops.installing || ops.resetting) return
+        stopServer()
+        val deadline = System.currentTimeMillis() + 20_000
+        while (System.currentTimeMillis() < deadline && (serverAlive || portBusy())) delay(200)
+        if (serverAlive || portBusy()) {
+            logLine("Reinstall skipped: the server did not stop")
+            return
+        }
+        install()
     }
 
     /**
@@ -119,14 +147,19 @@ class RuntimeController(
      * Everything is downloaded with pinned sha-256s and unpacked with our own extractors.
      */
     private fun installNative() {
-        // Also redo a bundle that was extracted but never fully patched (an earlier install died half way):
-        // it would be reused as is and then fail at startup with placeholder paths.
-        if (paths.opencodeNativeBin.isFile &&
-            (!runCatching { File(paths.opencodeBundle, "index.js").isFile }.getOrDefault(false) || bundleHasPlaceholders())
-        ) {
-            paths.bundleDir.deleteRecursively()
-        }
-        if (!paths.opencodeNativeBin.isFile) {
+        // Redo a bundle that is missing, was extracted but never fully patched (an earlier install
+        // died half way), or came from an older opencode-termux release. The old check only looked
+        // at the launcher, so a new OCT_VERSION in an app update never replaced the old bundle.
+        val bundleVersion = runCatching { paths.bundleVersionFile.readText().trim() }.getOrNull()
+        val needsBundle = bundleNeedsInstall(
+            binExists = paths.opencodeNativeBin.isFile,
+            indexExists = File(paths.opencodeBundle, "index.js").isFile,
+            hasPlaceholders = bundleHasPlaceholders(),
+            installedVersion = bundleVersion,
+            wantedVersion = OCT_VERSION,
+        )
+        if (needsBundle) {
+            if (paths.bundleDir.exists()) logLine("bundle: replacing ${bundleVersion ?: "unknown version"} with $OCT_VERSION")
             step("Downloading OpenCode", 0f)
             val tgz = File(paths.downloads, "opencode-native-$OCT_VERSION.tar.gz")
             Downloader.fetch(octUrl(OCT_VERSION), tgz, OCT_SHA) { d, t -> step("Downloading OpenCode", frac(d, t), mb(d, t)) }
@@ -167,41 +200,69 @@ class RuntimeController(
         }
         // The Termux packages the bundle runs on. Nothing here is apt: pure downloads + unzip.
         val usrRoot = File(paths.nativeUsr, "data/data/com.termux/files/usr")
+        paths.debMarkers.mkdirs()
         for (deb in TERMUX_DEBS) {
-            val have = when (deb.name) {
-                "bun" -> File(usrRoot, "bin/bun").isFile
-                "libicu" -> File(usrRoot, "lib/libicuuc.so.79.1").isFile
-                "ripgrep" -> File(usrRoot, "bin/rg").isFile
-                "pcre2" -> File(usrRoot, "lib/libpcre2-8.so").isFile
-                else -> false
-            }
+            // A key file alone is not proof: an install killed mid-extraction leaves some files
+            // behind, and the old check then called the package installed forever, so the missing
+            // libraries were never restored and the server kept failing to start.
+            val marker = File(paths.debMarkers, "${deb.name}.sha")
+            val markerVersion = runCatching { marker.readText().trim() }.getOrNull()
+            val have = !debNeedsInstall(markerVersion, deb.sha, debKeyFilePresent(deb.name, usrRoot))
             if (have) { logLine("termux ${deb.name}: already installed"); continue }
             step("Downloading ${deb.name}", 0f)
             val f = File(paths.downloads, "${deb.name}-${deb.sha.take(8)}.deb")
-            Downloader.fetch(deb.url, f, deb.sha) { d, t -> step("Downloading ${deb.name}", frac(d, t), mb(d, t)) }
+            Downloader.fetch(deb.urls, f, deb.sha) { d, t -> step("Downloading ${deb.name}", frac(d, t), mb(d, t)) }
             step("Installing ${deb.name}", 0f)
             val r = DebExtractor.extract(f, paths.nativeUsr) { d, t -> step("Installing ${deb.name}", frac(d, t)) }
+            // Written only after a complete unpack. A killed install leaves files but no marker, so
+            // the next run extracts the package again instead of trusting a half-written tree.
+            marker.writeText(deb.sha)
             logLine("termux ${deb.name}: ${r.files} files")
             f.delete()
         }
         if (!File(usrRoot, "bin/bun").isFile) error("bun did not land in the Termux layout; install failed")
         paths.tmp.mkdirs()
         paths.nativeHome.mkdirs()
-        // One-time migration: an existing proot install keeps its /root inside the old rootfs.
-        // A marker instead of "the native home is empty": Vault.restore() and Memory.sync() fill it before this runs.
-        val oldRoot = File(paths.rootfs, "root")
-        val migrated = File(paths.nativeHome, ".migrated-from-rootfs")
-        if (!migrated.exists() && oldRoot.isDirectory && oldRoot.list()?.isNotEmpty() == true) {
-            logLine("migrating the old /root into the native home")
-            // Files that already exist in the native home win; a clash must not abort the whole copy.
-            runCatching { oldRoot.copyRecursively(paths.nativeHome, overwrite = false) { _, _ -> kotlin.io.OnErrorAction.SKIP } }
-            runCatching { migrated.writeText("1") }
-        }
         paths.nativeHome.resolve("work").mkdirs()
         paths.nativeHome.resolve(".config/opencode").mkdirs()
         paths.nativeHome.resolve("uploads").mkdirs()
         paths.nativeHome.resolve("outbox").mkdirs()
         prefs.opencodeVersion = OCT_VERSION
+    }
+
+    /**
+     * One-time copy of the old proot /root into the native home. The live rootfs is the newer truth,
+     * but [Vault.restore] may already have filled the native home from its backups on this start, so
+     * a file is replaced only when it is missing, has a different length or the old copy is newer.
+     * That also retries a file cut short by a killed app, and it never lets an older backup shadow
+     * newer chats or keys.
+     *
+     * The marker is written only after a complete pass. The old code marked a partial copy as done,
+     * so files that failed (disk full, killed app) were never tried again.
+     */
+    private fun migrateLegacyHome() {
+        val oldRoot = File(paths.rootfs, "root")
+        // The marker sits next to the rootfs, outside the native directory a reset deletes. Inside it,
+        // every reset would make the next install copy the stale proot home back over a fresh one.
+        val marker = File(paths.rootfs.parentFile, ".migrated-from-rootfs")
+        val oldMarker = File(paths.nativeHome, ".migrated-from-rootfs")
+        // An install from before the marker moved still counts; do not copy again for those users.
+        if (oldMarker.exists() && !marker.exists()) runCatching { marker.writeText("1") }
+        if (marker.exists() || !oldRoot.isDirectory || oldRoot.list()?.isNotEmpty() != true) return
+        logLine("migrating the old /root into the native home")
+        paths.nativeHome.mkdirs()
+        var failed = 0
+        oldRoot.walkTopDown().forEach { src ->
+            val dst = File(paths.nativeHome, src.relativeTo(oldRoot).path)
+            if (src.isDirectory) {
+                dst.mkdirs()
+            } else if (src.isFile && shouldMigrateLegacyFile(dst.isFile, dst.length(), dst.lastModified(), src.length(), src.lastModified())) {
+                runCatching { dst.parentFile?.mkdirs(); src.copyTo(dst, overwrite = true) }
+                    .onFailure { failed++ }
+            }
+        }
+        if (failed == 0) runCatching { marker.writeText("1") }
+        else logLine("migration left $failed files behind; it will retry on the next start")
     }
 
     /** The text-like files of the release bundle (launcher, JS): never the native libraries. */
@@ -210,6 +271,15 @@ class RuntimeController(
 
     private fun bundleHasPlaceholders(): Boolean = bundleFiles().any { f ->
         runCatching { String(f.readBytes(), Charsets.ISO_8859_1).contains("@TERMUX_PREFIX@") }.getOrDefault(false)
+    }
+
+    /** One file that has to exist once a Termux package is unpacked; the marker proves it is complete. */
+    private fun debKeyFilePresent(name: String, usrRoot: File): Boolean = when (name) {
+        "bun" -> File(usrRoot, "bin/bun").isFile
+        "libicu" -> File(usrRoot, "lib/libicuuc.so.79.1").isFile
+        "ripgrep" -> File(usrRoot, "bin/rg").isFile
+        "pcre2" -> File(usrRoot, "lib/libpcre2-8.so").isFile
+        else -> false
     }
 
     /** The environment the native server runs with: XDG paths all live in the native home. */
@@ -289,7 +359,10 @@ class RuntimeController(
     suspend fun supervise() = withContext(Dispatchers.IO) {
         // Two loops (the service got recreated while the old loop was still winding down) take turns
         // killing each other's server and crash-loop on "port 4096 in use". Only one may run.
-        if (!supervising.compareAndSet(false, true)) return@withContext
+        if (!beginSupervising()) {
+            logLine("Another server loop is still running; not starting a second one")
+            return@withContext
+        }
         try {
             superviseLoop()
         } finally {
@@ -297,7 +370,29 @@ class RuntimeController(
         }
     }
 
+    /**
+     * Takes the single-loop slot. A service restart can arrive while the previous loop is still
+     * being cancelled, so wait for it instead of returning: the caller stops the service right
+     * after, and giving up here leaves the server down until Android retries the sticky service.
+     */
+    private suspend fun beginSupervising(): Boolean {
+        if (supervising.compareAndSet(false, true)) return true
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            delay(100)
+            if (supervising.compareAndSet(false, true)) return true
+        }
+        return false
+    }
+
     private suspend fun superviseLoop() = withContext(Dispatchers.IO) {
+        // A wiped or half-removed runtime must not turn into a crash/restart loop: there is nothing
+        // to execute, so every attempt fails the same way and the user only sees "Server crashed".
+        if (!paths.nativeReady) {
+            logLine("The native runtime is missing; install it again")
+            state.value = RuntimeState.NotInstalled
+            return@withContext
+        }
         stopRequested = false
         var failures = 0
         var windowStart = System.currentTimeMillis()
@@ -377,6 +472,7 @@ class RuntimeController(
                 logLine("Port ${prefs.serverPort} still busy, killing leftover server (attempt ${i + 1})")
                 killLeftoverJava()
                 if (waitPortFree(4_000)) return
+                // A server started through su is invisible to the scan above: ask pidof as root.
                 Root.pidsOf("bun").filter { pid -> isLeftoverServer(pid) }.forEach { Root.kill(it) }
                 if (waitPortFree(2_000)) return
             }
@@ -390,25 +486,37 @@ class RuntimeController(
     }
 
     /** True when [pid]'s cmdline is one of our server processes (bun running the bundle, or a proot-era leftover). */
-    private fun isLeftoverServer(pid: Int): Boolean {
-        val cmd = runCatching { java.io.File("/proc/$pid/cmdline").readBytes().decodeToString().replace('\u0000', ' ').trim() }.getOrDefault("")
-        return cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(paths.opencodeNativeBin.path)
+    private fun isLeftoverServer(pid: Int): Boolean = isServerCommand(cmdlineOf(pid), paths.opencodeNativeBin.path)
+
+    /**
+     * The command line of [pid]. Read directly when possible, through su when the process is hidden
+     * from this app (a server that [Root.spawnWithFallback] started as root).
+     */
+    private fun cmdlineOf(pid: Int): String {
+        val direct = directCmdline(pid)
+        return if (direct.isNotEmpty()) direct else Root.cmdlineOf(pid)
     }
+
+    private fun directCmdline(pid: Int): String =
+        runCatching { java.io.File("/proc/$pid/cmdline").readBytes().decodeToString() }.getOrDefault("")
+            .replace('\u0000', ' ').trim()
 
     /**
      * Kills leftover server processes found by scanning /proc: the guest processes (and the native
      * bun) run with this app's UID, so their cmdline is readable and they can be signalled directly.
+     * A root-run server is invisible here; [freePort] finds that one through pidof, and only when
+     * the port is actually stuck.
      */
     private fun killLeftoverJava() {
         runCatching {
             for (p in java.io.File("/proc").listFiles() ?: emptyArray()) {
                 val pid = p.name.toIntOrNull() ?: continue
                 if (pid == android.os.Process.myPid()) continue
-                val cmd = runCatching { java.io.File(p, "cmdline").readBytes().decodeToString().replace('\u0000', ' ').trim() }.getOrDefault("")
+                val cmd = directCmdline(pid)
                 if (cmd.isEmpty()) continue
                 // The bun server cmdline carries the bundle entry (lib/opencode/index.js); the legacy
                 // proot-era binary carried /usr/local/bin/opencode. Nothing else of ours matches.
-                if (cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(paths.opencodeNativeBin.path)) {
+                if (isServerCommand(cmd, paths.opencodeNativeBin.path)) {
                     val killed = runCatching { android.os.Process.killProcess(pid); true }.getOrDefault(false)
                     if (!killed || isAlive(pid)) Root.kill(pid) // a root-run server answers only to su
                     logLine("Killed leftover server process $pid: ${cmd.take(120)}")
@@ -460,9 +568,14 @@ class RuntimeController(
 
     /** Start the server through a foreground service, otherwise Android kills the process in the background. */
     fun startServer() {
-        if (resetting) return
+        if (ops.resetting) return
         val s = state.value
         if (s is RuntimeState.NotInstalled || s is RuntimeState.Installing || s is RuntimeState.InstallFailed) return
+        if (!paths.nativeReady) {
+            logLine("The native runtime is missing; install it again")
+            state.value = RuntimeState.NotInstalled
+            return
+        }
         userStopped = false
         ContextCompat.startForegroundService(app, Intent(app, ServerService::class.java).setAction(ServerService.ACTION_START))
     }
@@ -496,26 +609,87 @@ class RuntimeController(
         return runGuest(listOf("/bin/bash", "-lc", script), onLine = onLine)
     }
 
-    fun resetRuntime() {
-        if (resetting) return
-        resetting = true
+    /**
+     * Deletes the native runtime. Returns false when an install is still running: both write the
+     * same directories, and a reset in the middle of one leaves the ready flag over an empty tree.
+     */
+    fun resetRuntime(): Boolean {
+        if (!ops.beginReset()) {
+            logLine("Reset skipped: an install is still running")
+            return false
+        }
         // Deleting the environment is hundreds of megabytes and thousands of files: not on the main thread.
         Thread {
             try {
+                // 9Router keeps its data under /root, which is inside the native home this reset
+                // deletes. Stop it first instead of pulling its database out from under it.
+                runCatching { com.celoext.Graph.ninerouter.stopServer() }
+                var nr = 0
+                while (nr < 10_000 && (com.celoext.Graph.ninerouter.serverAlive || com.celoext.Graph.ninerouter.portBusy())) {
+                    Thread.sleep(200); nr += 200
+                }
                 stopServer()
                 var waited = 0
                 while (waited < 10_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
-                killLeftoverJava()
-                // The chat database is only consistent once the server has stopped writing.
-                Vault.save()
+                if (serverAlive || portBusy()) {
+                    killLeftoverJava()
+                    waited = 0
+                    while (waited < 5_000 && (serverAlive || portBusy())) { Thread.sleep(200); waited += 200 }
+                }
+                // SQLite finishes its last write just after the socket closes.
+                Thread.sleep(800)
+                val stopped = !serverAlive && !portBusy()
+                if (!stopped) logLine("Server is still running; keeping the previous chat backup instead of copying a live database")
+                Vault.save(includeChats = stopped)
                 // Wipe the native runtime (bundle, termux debs, home). The proot rootfs stays: 9Router runs in it.
                 paths.native.deleteRecursively()
                 paths.downloads.deleteRecursively()
                 prefs.runtimeReady = false
             } finally {
-                resetting = false
+                ops.endReset()
                 state.value = RuntimeState.NotInstalled
             }
         }.apply { isDaemon = true }.start()
+        return true
     }
 }
+
+/**
+ * Whether a file from the old proot /root should be written into the native home. A missing file is
+ * copied. A different length means the target is truncated or an older revision, so copy. Otherwise
+ * the old copy wins only when it is newer than what is already there.
+ */
+internal fun shouldMigrateLegacyFile(
+    targetExists: Boolean,
+    targetLength: Long,
+    targetModified: Long,
+    sourceLength: Long,
+    sourceModified: Long,
+): Boolean = !targetExists || targetLength != sourceLength || sourceModified > targetModified
+
+/**
+ * Whether a process command line belongs to our server: bun running the bundle, the launcher, or
+ * the proot-era binary. Anything else must not be killed, even when the process is called bun.
+ */
+internal fun isServerCommand(cmd: String, nativeBinPath: String): Boolean =
+    cmd.contains("lib/opencode/index.js") || cmd.contains("/usr/local/bin/opencode") || cmd.contains(nativeBinPath)
+
+/**
+ * Whether the OpenCode bundle on disk has to be downloaded again. A missing launcher or entry
+ * point, leftover `@TERMUX_PREFIX@` placeholders or an older version all mean yes. A bundle from
+ * before the version marker existed counts as older: its actual version is unknown.
+ */
+internal fun bundleNeedsInstall(
+    binExists: Boolean,
+    indexExists: Boolean,
+    hasPlaceholders: Boolean,
+    installedVersion: String?,
+    wantedVersion: String,
+): Boolean = !binExists || !indexExists || hasPlaceholders || installedVersion != wantedVersion
+
+/**
+ * Whether a Termux package has to be unpacked again. The marker proves the last unpack finished;
+ * a key file alone does not, because a killed install leaves part of the tree behind.
+ */
+internal fun debNeedsInstall(markerVersion: String?, wantedVersion: String, keyFileExists: Boolean): Boolean =
+    !keyFileExists || markerVersion != wantedVersion

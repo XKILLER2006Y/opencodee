@@ -44,6 +44,7 @@ import com.celoext.BuildConfig
 import com.celoext.Graph
 import com.celoext.api.OcJson
 import com.celoext.api.str
+import com.celoext.data.CrashLog
 import com.celoext.runtime.RuntimeState
 import com.celoext.ui.Nav
 import com.celoext.ui.components.IconBtn
@@ -142,10 +143,13 @@ fun ServerScreen(nav: Nav) {
     val scope = rememberCoroutineScope()
     val rt by Graph.runtime.state.collectAsState()
     val log by Graph.runtime.log.collectAsState()
+    val appLog by CrashLog.lines.collectAsState()
     val prefs = Graph.prefs
     var showLog by remember { mutableStateOf(false) }
+    var showAppLog by remember { mutableStateOf(false) }
     var tools by remember { mutableStateOf<List<String>?>(null) }
     var reset by remember { mutableStateOf(false) }
+    var reinstall by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().screenBackdrop("MoreScreens2")) {
         TopBar("Local server", left = { IconBtn(Ic.Back, { nav.pop() }) })
@@ -169,7 +173,12 @@ fun ServerScreen(nav: Nav) {
             Spacer(Modifier.height(16.dp))
             SettingsGroup {
                 SettingsRow("Start with the app", icon = Ic.Zap, trailing = { OcSwitch(prefs.autoStartServer) { prefs.autoStartServer = it } })
-                SettingsRow("Keep CPU awake while running", icon = Ic.Server, trailing = { OcSwitch(prefs.keepAwake) { prefs.keepAwake = it } })
+                SettingsRow(
+                    "Keep CPU awake while working",
+                    subtitle = "Held only while working, released a minute after the last task",
+                    icon = Ic.Server,
+                    trailing = { OcSwitch(prefs.keepAwake) { prefs.keepAwake = it } },
+                )
                 SettingsRow("Compatibility mode", subtitle = "Proot fallback for 9router if its processes get killed", icon = Ic.Shield, trailing = { OcSwitch(prefs.noSeccomp) { prefs.noSeccomp = it; Graph.runtime.restartServer() } })
                 SettingsRow("Root access (su)", subtitle = "When a file is locked down, retry through KernelSU/Magisk so any folder works", icon = Ic.Shield, trailing = { OcSwitch(prefs.rootFallback) { prefs.rootFallback = it } })
                 // Android 12+ kills "extra" child processes of apps (phantom process killer), and proot has many
@@ -188,6 +197,8 @@ fun ServerScreen(nav: Nav) {
                         lines.add(if (code == 0) "✓ Done" else "✗ Failed (exit $code)")
                     }
                 })
+                SettingsRow("Reinstall OpenCode", subtitle = "Downloads the bundled runtime again; chats and projects are kept", icon = Ic.Refresh, onClick = { reinstall = true })
+                SettingsRow("App log", subtitle = "Errors from the app itself, sent with a bug report", icon = Ic.Warning, onClick = { showAppLog = true })
                 SettingsRow("Don't kill the server in background", subtitle = "Exempt the app from battery optimization", icon = Ic.Zap, onClick = {
                     ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + ctx.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 })
@@ -203,10 +214,16 @@ fun ServerScreen(nav: Nav) {
     }
 
     if (showLog) LogSheet(log) { showLog = false }
+    if (showAppLog) LogSheet(appLog, "App log") { showAppLog = false }
     tools?.let { lines -> LogSheet(lines, "Installing tools") { tools = null } }
     if (reset) OcDialog("Reset environment?", { reset = false }, "Reset", {
-        reset = false; Graph.runtime.resetRuntime()
+        reset = false
+        if (!Graph.runtime.resetRuntime()) Graph.chats.toasts.tryEmit("An install is still running. Wait for it to finish, then reset.")
     }, danger = true) { Txt("The environment, OpenCode and all projects under /root will be deleted. Sessions history is lost too.", size = 16.sp, color = Oc.c.textDim) }
+    if (reinstall) OcDialog("Reinstall OpenCode?", { reinstall = false }, "Reinstall", {
+        reinstall = false
+        scope.launch { Graph.runtime.reinstallNative() }
+    }) { Txt("Downloads the bundled OpenCode and its packages again. The server stops while that happens. Chats and projects are kept.", size = 16.sp, color = Oc.c.textDim) }
 }
 
 @Composable

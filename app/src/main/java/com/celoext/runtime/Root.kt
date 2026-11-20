@@ -117,6 +117,15 @@ object Root {
         out.split(Regex("\\s+")).mapNotNull { it.toIntOrNull() }
     }.getOrDefault(emptyList())
 
+    /**
+     * The command line of [pid] read as root. A server started through su runs as root, and Android
+     * can hide its /proc entry from this app, which made the old leftover scan miss exactly the
+     * process that keeps the port open.
+     */
+    fun cmdlineOf(pid: Int): String = runCatching {
+        execCapture(5) { ProcessBuilder("su", "-c", "cat /proc/$pid/cmdline").redirectErrorStream(true).start() }
+    }.getOrDefault("").replace('\u0000', ' ').trim()
+
     /** Spawns [argv] as root, carrying [env] into the root shell (su resets the environment). */
     fun spawn(argv: List<String>, env: Map<String, String>, cwd: String?): Process {
         val exports = env.entries.joinToString(" ") { (k, v) -> "export ${k}=${shellQuote(v)}; " }

@@ -1,8 +1,10 @@
 package com.celoext.api
 
 import com.celoext.Graph
+import com.celoext.data.CrashLog
 import com.celoext.runtime.RuntimeController
 import com.celoext.runtime.RuntimeState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -25,6 +27,14 @@ import java.util.concurrent.ConcurrentHashMap
 
 /** One global SSE connection to `/api/event`: translates v2 events into v1-shaped events for the app. */
 class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeController) {
+    companion object {
+        /** Upper bound for the reconnect delay after a failed or dropped stream. */
+        const val MAX_BACKOFF = 8000L
+
+        /** Doubles the wait after every failed attempt, up to [MAX_BACKOFF]; an open stream resets it. */
+        fun nextBackoff(current: Long): Long = (current * 2).coerceAtMost(MAX_BACKOFF)
+    }
+
     data class Event(val directory: String?, val type: String, val props: JsonObject)
 
     val events = MutableSharedFlow<Event>(extraBufferCapacity = 1024)
@@ -51,11 +61,39 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
         while (currentCoroutineContext().isActive) {
             try {
                 withContext(Dispatchers.IO) { stream { backoff = 500L } }
-            } catch (_: Exception) { }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A dead event stream means the chat stops updating with no other sign, so it has to
+                // leave a trace: "HTTP 401" is a wrong password, a timeout is a stalled connection.
+                noteProblem("event stream: ${describe(e)}, retrying")
+            }
             connected.value = false
             delay(backoff)
-            backoff = (backoff * 2).coerceAtMost(8000)
+            backoff = nextBackoff(backoff)
         }
+    }
+
+    /**
+     * Same failure every few seconds would flush the real history out of the app log during a long
+     * outage, so a repeated message is written at most once every five minutes.
+     */
+    private var lastProblem: String? = null
+    private var lastProblemAt = 0L
+
+    private fun noteProblem(text: String) {
+        val now = System.currentTimeMillis()
+        if (text == lastProblem && now - lastProblemAt < 5 * 60_000) return
+        lastProblem = text
+        lastProblemAt = now
+        CrashLog.note("events", text)
+    }
+
+    private fun describe(e: Exception): String = when (e) {
+        is java.net.SocketTimeoutException -> "no data for ${OpenCodeApi.STREAM_READ_TIMEOUT}s"
+        is java.net.ConnectException -> "cannot connect"
+        is java.net.UnknownHostException -> "host not found"
+        else -> e.message ?: e.javaClass.simpleName
     }
 
     private suspend fun stream(onOpen: () -> Unit) {
@@ -63,26 +101,30 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
         val handle = currentCoroutineContext().job.invokeOnCompletion { call.cancel() }
         try {
             call.execute().use { r ->
-                if (!r.isSuccessful) return
+                // Without this the loop retried a 401 in silence forever: the list looked connected
+                // while nothing was arriving.
+                if (!r.isSuccessful) throw java.io.IOException("HTTP ${r.code}")
                 onOpen()
                 connected.value = true
                 generation.value++
                 val src = r.body.source()
-                val data = StringBuilder()
+                val frames = SseFrames()
                 while (true) {
                     val line = src.readUtf8Line() ?: break
-                    if (line.isEmpty()) {
-                        if (data.isNotEmpty()) { dispatch(data.toString()); data.setLength(0) }
-                    } else if (line.startsWith("data:")) {
-                        if (data.isNotEmpty()) data.append('\n')
-                        data.append(line.removePrefix("data:").removePrefix(" "))
-                    }
+                    frames.line(line)?.let { dispatch(it) }
                 }
             }
         } finally { handle.dispose() }
     }
 
-    private fun dispatch(json: String) {
+    /**
+     * Frames arrive on the socket reader, consumers run on the main thread. `tryEmit` on a full
+     * buffer returns false and the event is gone: a dropped text delta left a hole in the reply,
+     * and a dropped `session.idle` kept the chat on "working" until something forced a reload.
+     * Suspending instead applies backpressure to the socket; if a consumer stalls for longer than
+     * the read timeout the stream reconnects and reloads, which loses nothing.
+     */
+    private suspend fun dispatch(json: String) {
         val o = runCatching { OcJson.parseToJsonElement(json) as? JsonObject }.getOrNull() ?: return
         val rawType = o.str("type") ?: o.obj("payload")?.str("type") ?: return
         val dir = (o.obj("location")?.str("directory") ?: o.str("directory"))?.let { p ->
@@ -92,7 +134,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
 
         // If it's already v1-shaped with payload.properties, pass through
         if (o.containsKey("payload")) {
-            events.tryEmit(Event(dir, rawType, data))
+            events.emit(Event(dir, rawType, data))
             return
         }
 
@@ -102,7 +144,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val sid = data.str("sessionID") ?: return
                 val mid = data.str("assistantMessageID") ?: return
                 val started = data.long("started") ?: System.currentTimeMillis()
-                events.tryEmit(Event(dir, "message.updated", buildJsonObject {
+                events.emit(Event(dir, "message.updated", buildJsonObject {
                     putJsonObject("info") {
                         put("id", mid)
                         put("sessionID", sid)
@@ -118,7 +160,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val mid = data.str("assistantMessageID") ?: return
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-text-$ord"
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", pid)
                         put("messageID", mid)
@@ -134,7 +176,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-text-$ord"
                 val delta = data.str("delta") ?: ""
-                events.tryEmit(Event(dir, "message.part.delta", buildJsonObject {
+                events.emit(Event(dir, "message.part.delta", buildJsonObject {
                     put("sessionID", sid)
                     put("messageID", mid)
                     put("partID", pid)
@@ -148,7 +190,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-text-$ord"
                 val text = data.str("text") ?: ""
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", pid)
                         put("messageID", mid)
@@ -163,7 +205,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val mid = data.str("assistantMessageID") ?: return
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-reasoning-$ord"
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", pid)
                         put("messageID", mid)
@@ -179,7 +221,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-reasoning-$ord"
                 val delta = data.str("delta") ?: ""
-                events.tryEmit(Event(dir, "message.part.delta", buildJsonObject {
+                events.emit(Event(dir, "message.part.delta", buildJsonObject {
                     put("sessionID", sid)
                     put("messageID", mid)
                     put("partID", pid)
@@ -193,7 +235,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val ord = data.long("ordinal") ?: 0L
                 val pid = "$mid-reasoning-$ord"
                 val text = data.str("text") ?: ""
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", pid)
                         put("messageID", mid)
@@ -214,7 +256,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                     else -> rawName
                 }
                 toolNames["$sid:$tid"] = mappedName
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", tid)
                         put("messageID", mid)
@@ -234,7 +276,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val tid = data.str("id") ?: return
                 val mappedName = toolNames["$sid:$tid"] ?: "tool"
                 val input = data.obj("input") ?: buildJsonObject {}
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", tid)
                         put("messageID", mid)
@@ -254,7 +296,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val tid = data.str("id") ?: return
                 val mappedName = toolNames["$sid:$tid"] ?: "tool"
                 val metadata = data.obj("metadata")
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", tid)
                         put("messageID", mid)
@@ -277,7 +319,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val output = content.mapNotNull { (it as? JsonObject)?.str("text") }.joinToString("\n")
                 val metadata = data.obj("metadata")
 
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", tid)
                         put("messageID", mid)
@@ -293,7 +335,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 }))
 
                 metadata?.arr("todos")?.let { todos ->
-                    events.tryEmit(Event(dir, "todo.updated", buildJsonObject {
+                    events.emit(Event(dir, "todo.updated", buildJsonObject {
                         put("sessionID", sid)
                         put("todos", todos)
                     }))
@@ -309,7 +351,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 val metadata = data.obj("metadata")
                 val err = data.obj("error")
 
-                events.tryEmit(Event(dir, "message.part.updated", buildJsonObject {
+                events.emit(Event(dir, "message.part.updated", buildJsonObject {
                     putJsonObject("part") {
                         put("id", tid)
                         put("messageID", mid)
@@ -328,7 +370,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             "session.step.ended" -> {
                 val sid = data.str("sessionID") ?: return
                 val mid = data.str("assistantMessageID") ?: return
-                events.tryEmit(Event(dir, "message.updated", buildJsonObject {
+                events.emit(Event(dir, "message.updated", buildJsonObject {
                     putJsonObject("info") {
                         put("id", mid)
                         put("sessionID", sid)
@@ -342,7 +384,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             "session.step.failed" -> {
                 val sid = data.str("sessionID") ?: return
                 val mid = data.str("assistantMessageID") ?: return
-                events.tryEmit(Event(dir, "message.updated", buildJsonObject {
+                events.emit(Event(dir, "message.updated", buildJsonObject {
                     putJsonObject("info") {
                         put("id", mid)
                         put("sessionID", sid)
@@ -357,17 +399,17 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             "session.execution.failed", "session.execution.interrupted" -> {
                 val sid = data.str("sessionID") ?: return
                 when (executionStatus(rawType)) {
-                    "busy" -> events.tryEmit(Event(dir, "session.status", buildJsonObject {
+                    "busy" -> events.emit(Event(dir, "session.status", buildJsonObject {
                         put("sessionID", sid)
                         putJsonObject("status") { put("type", "busy") }
                     }))
                     // ChatHub's idle handling clears the status, sends the notification and reloads the
                     // open chat, which also confirms the local bubble and picks up the stored message ids.
-                    "idle" -> events.tryEmit(Event(dir, "session.idle", buildJsonObject { put("sessionID", sid) }))
+                    "idle" -> events.emit(Event(dir, "session.idle", buildJsonObject { put("sessionID", sid) }))
                 }
             }
-            "session.status" -> events.tryEmit(Event(dir, "session.status", data))
-            "session.idle" -> events.tryEmit(Event(dir, "session.idle", data))
+            "session.status" -> events.emit(Event(dir, "session.status", data))
+            "session.idle" -> events.emit(Event(dir, "session.idle", data))
             "permission.asked" -> {
                 val id = data.str("id") ?: return
                 val sid = data.str("sessionID") ?: ""
@@ -380,7 +422,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
                 }
                 val resources = data.arr("resources") ?: JsonArray(emptyList())
                 val callID = data.obj("source")?.str("id")
-                events.tryEmit(Event(dir, "permission.asked", buildJsonObject {
+                events.emit(Event(dir, "permission.asked", buildJsonObject {
                     put("id", id)
                     put("sessionID", sid)
                     put("permission", mappedAction)
@@ -392,32 +434,32 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             "permission.replied" -> {
                 val rid = data.str("requestID") ?: data.str("id") ?: return
                 val sid = data.str("sessionID") ?: ""
-                events.tryEmit(Event(dir, "permission.replied", buildJsonObject {
+                events.emit(Event(dir, "permission.replied", buildJsonObject {
                     put("requestID", rid)
                     put("sessionID", sid)
                 }))
             }
             "form.created" -> {
                 val form = data.obj("form") ?: data
-                events.tryEmit(Event(dir, "question.asked", form))
+                events.emit(Event(dir, "question.asked", form))
             }
             "form.replied" -> {
                 val fid = data.str("formID") ?: data.str("id") ?: return
-                events.tryEmit(Event(dir, "question.replied", buildJsonObject { put("requestID", fid) }))
+                events.emit(Event(dir, "question.replied", buildJsonObject { put("requestID", fid) }))
             }
             "form.cancelled" -> {
                 val fid = data.str("formID") ?: data.str("id") ?: return
-                events.tryEmit(Event(dir, "question.rejected", buildJsonObject { put("requestID", fid) }))
+                events.emit(Event(dir, "question.rejected", buildJsonObject { put("requestID", fid) }))
             }
             "session.created" -> {
-                events.tryEmit(Event(dir, "session.created", buildJsonObject {
+                events.emit(Event(dir, "session.created", buildJsonObject {
                     put("info", data)
                 }))
             }
             "session.renamed" -> {
                 val sid = data.str("sessionID") ?: return
                 val title = data.str("title") ?: ""
-                events.tryEmit(Event(dir, "session.updated", buildJsonObject {
+                events.emit(Event(dir, "session.updated", buildJsonObject {
                     putJsonObject("info") {
                         put("id", sid)
                         put("title", title)
@@ -426,7 +468,7 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             }
             "session.archived" -> {
                 val sid = data.str("sessionID") ?: return
-                events.tryEmit(Event(dir, "session.updated", buildJsonObject {
+                events.emit(Event(dir, "session.updated", buildJsonObject {
                     putJsonObject("info") {
                         put("id", sid)
                         putJsonObject("time") { put("archived", System.currentTimeMillis()) }
@@ -435,13 +477,13 @@ class EventHub(private val api: OpenCodeApi, private val runtime: RuntimeControl
             }
             "session.deleted" -> {
                 val sid = data.str("sessionID") ?: data.str("id") ?: return
-                events.tryEmit(Event(dir, "session.deleted", buildJsonObject {
+                events.emit(Event(dir, "session.deleted", buildJsonObject {
                     put("id", sid)
                     putJsonObject("info") { put("id", sid) }
                 }))
             }
             else -> {
-                events.tryEmit(Event(dir, rawType, data))
+                events.emit(Event(dir, rawType, data))
             }
         }
     }
@@ -459,4 +501,28 @@ internal fun executionStatus(rawType: String): String? = when (rawType) {
     "session.execution.started" -> "busy"
     "session.execution.succeeded", "session.execution.failed", "session.execution.interrupted" -> "idle"
     else -> null
+}
+
+/**
+ * Assembles one SSE frame from its lines. `data:` lines are joined with a newline, other fields
+ * (`event:`, `id:`, `retry:`), comments and blank lines alone produce nothing. Pulled out of the
+ * reader so the framing can be tested without a server.
+ */
+internal class SseFrames {
+    private val data = StringBuilder()
+
+    /** Feeds one line; returns the payload when a blank line closes a non-empty frame. */
+    fun line(line: String): String? {
+        if (line.isEmpty()) {
+            if (data.isEmpty()) return null
+            val out = data.toString()
+            data.setLength(0)
+            return out
+        }
+        if (line.startsWith("data:")) {
+            if (data.isNotEmpty()) data.append('\n')
+            data.append(line.removePrefix("data:").removePrefix(" "))
+        }
+        return null
+    }
 }

@@ -29,9 +29,13 @@ object Vault {
         to.setLastModified(from.lastModified())
     }
 
-    /** From the rootfs to the vault. An empty or broken auth.json doesn't overwrite a good copy. */
-    fun save() {
+    /**
+     * From the rootfs to the vault. [includeChats] must be false when the server could not be
+     * stopped: copying SQLite while it is writing leaves a database that cannot be restored.
+     */
+    fun save(includeChats: Boolean = true) {
         saveLight()
+        if (!includeChats) return
         runCatching {
             // The chat database is SQLite: copy it only when the server is not writing (stop/reset/backup).
             copyIfNewer(live(DB), File(root, DB))
@@ -66,8 +70,10 @@ object Vault {
                 // missing leaves that placeholder and providers look "gone" until user re-enters keys.
                 val tEmpty = !t.isFile || t.length() <= 2 || runCatching { JSONObject(t.readText()).length() == 0 }.getOrDefault(false)
                 val vUseful = v.length() > 2 && runCatching { JSONObject(v.readText()).length() > 0 }.getOrDefault(false)
-                // Never replace anything with an empty/placeholder copy; otherwise restore when the target is gone, empty or older.
-                if (vUseful && (!t.isFile || tEmpty || v.lastModified() >= t.lastModified())) { t.parentFile?.mkdirs(); v.copyTo(t, overwrite = true) }
+                // A placeholder in the vault must never replace working keys, while a missing or
+                // placeholder live file should take the vault copy. The rule is a pure function so
+                // both directions stay tested.
+                if (shouldRestoreTarget(t.isFile, tEmpty, t.lastModified(), v.lastModified(), vUseful)) { t.parentFile?.mkdirs(); v.copyTo(t, overwrite = true) }
             }
             fun backText(rel: String) {
                 val v = File(root, rel); val t = live(rel)
@@ -107,3 +113,16 @@ object Vault {
         }
     }
 }
+
+/**
+ * Whether a vault file should be written over the live one. Only a useful copy is ever written:
+ * it fills a missing or placeholder target, and otherwise wins only when it is newer. An empty
+ * vault file must never erase working keys.
+ */
+internal fun shouldRestoreTarget(
+    targetExists: Boolean,
+    targetEmpty: Boolean,
+    targetModified: Long,
+    vaultModified: Long,
+    vaultUseful: Boolean,
+): Boolean = vaultUseful && (!targetExists || targetEmpty || vaultModified >= targetModified)

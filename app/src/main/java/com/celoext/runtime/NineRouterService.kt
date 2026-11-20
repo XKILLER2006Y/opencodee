@@ -5,10 +5,9 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
-import android.content.Context
 import android.content.Intent
 import android.os.IBinder
-import android.os.PowerManager
+import androidx.compose.runtime.snapshotFlow
 import com.celoext.Graph
 import com.celoext.MainActivity
 import com.celoext.R
@@ -17,6 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /** Foreground service that hosts the local 9Router gateway, next to [ServerService]. */
@@ -30,7 +32,7 @@ class NineRouterService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
-    private var wake: PowerManager.WakeLock? = null
+    private val wake by lazy { WorkWake(this, scope, "ocmobile:ninerouter") }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -41,10 +43,6 @@ class NineRouterService : Service() {
             Graph.ninerouter.stopServer()
             stopSelf()
             return START_NOT_STICKY
-        }
-        if (Graph.prefs.keepAwake && wake == null) {
-            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
-            wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ocmobile:ninerouter").apply { setReferenceCounted(false); acquire() }
         }
         if (job == null) {
             job = scope.launch {
@@ -59,6 +57,7 @@ class NineRouterService : Service() {
                         getSystemService(NotificationManager::class.java).notify(ID, notification(text))
                     }
                 }
+                launch { followWork() }
                 Graph.ninerouter.supervise()
                 stopSelf()
             }
@@ -66,10 +65,30 @@ class NineRouterService : Service() {
         return START_STICKY
     }
 
+    /**
+     * The gateway itself idles once it is up: what needs the CPU is its own install and start, and
+     * the prompts the opencode server sends through it. Same policy as [ServerService].
+     */
+    private suspend fun followWork() {
+        combine(
+            Graph.ninerouter.state,
+            Graph.chats.statuses,
+            Graph.chats.sending,
+            snapshotFlow { Graph.prefs.keepAwake },
+        ) { state, statuses, sending, keepAwake ->
+            needsWakeLock(
+                keepAwake = keepAwake,
+                starting = state is NineRouterState.Installing || state is NineRouterState.Starting || state is NineRouterState.Crashed,
+                busySessions = statuses.size,
+                sendsInFlight = sending,
+            )
+        }.distinctUntilChanged().collect { wake.setWork(it) }
+    }
+
     override fun onDestroy() {
         Graph.ninerouter.requestStop()
+        wake.close()
         scope.cancel()
-        wake?.let { if (it.isHeld) it.release() }
         super.onDestroy()
     }
 

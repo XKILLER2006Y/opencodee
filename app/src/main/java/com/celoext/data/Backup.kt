@@ -62,7 +62,12 @@ object Backup {
         val rt = Graph.runtime
         rt.stopServer()
         // the old server loop must finish completely, otherwise it writes "stopped" over the new start
-        kotlinx.coroutines.withTimeoutOrNull(20_000) { while (rt.serverAlive) delay(200) }
+        val stopped = kotlinx.coroutines.withTimeoutOrNull(20_000) {
+            while (rt.serverAlive) delay(200)
+            true
+        } ?: false
+        // A backup taken while the server still writes is worse than no backup: it cannot be restored.
+        if (!stopped) error("The server did not stop, so the chat database cannot be copied safely. Try again.")
         delay(800)
         try { return block() } finally { rt.startServer() }
     }

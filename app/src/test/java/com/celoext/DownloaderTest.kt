@@ -91,6 +91,46 @@ class DownloaderTest {
         }
     }
 
+    @Test fun fallsBackToTheNextMirrorWhenTheFirstIsGone() {
+        server.createContext("/gone") { ex ->
+            ex.sendResponseHeaders(404, -1)
+            ex.close()
+        }
+        server.createContext("/f") { ex ->
+            ex.sendResponseHeaders(200, payload.size.toLong())
+            ex.responseBody.write(payload)
+            ex.close()
+        }
+        server.start()
+        val dest = tempDest()
+        try {
+            Downloader.fetch(listOf(url("/gone"), url("/f")), dest, sha()) { _, _ -> }
+            assertArrayEquals(payload, dest.readBytes())
+            assertFalse(File(dest.path + ".part").exists())
+        } finally {
+            dest.delete()
+            File(dest.path + ".part").delete()
+        }
+    }
+
+    @Test fun failsWhenEveryMirrorIsGone() {
+        server.createContext("/gone") { ex ->
+            ex.sendResponseHeaders(404, -1)
+            ex.close()
+        }
+        server.start()
+        val dest = tempDest()
+        try {
+            assertThrows(IllegalStateException::class.java) {
+                Downloader.fetch(listOf(url("/gone"), url("/gone")), dest, sha()) { _, _ -> }
+            }
+            assertFalse(dest.exists())
+        } finally {
+            dest.delete()
+            File(dest.path + ".part").delete()
+        }
+    }
+
     @Test fun checksumMismatchLeavesNothingBehind() {
         server.createContext("/f") { ex ->
             ex.sendResponseHeaders(200, payload.size.toLong())

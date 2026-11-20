@@ -4,6 +4,7 @@ import android.app.Application
 import com.celoext.api.EventHub
 import com.celoext.api.OpenCodeApi
 import com.celoext.data.Catalog
+import com.celoext.data.CrashLog
 import com.celoext.data.LiveNotify
 import com.celoext.data.PhoneBridge
 import com.celoext.data.Devices
@@ -15,6 +16,7 @@ import com.celoext.data.UsageTracker
 import com.celoext.runtime.NineRouterController
 import com.celoext.runtime.RuntimeController
 import com.celoext.runtime.RuntimePaths
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -28,14 +30,38 @@ class OcApp : Application() {
         // our own toolbar over selected text (Copy / Select all / Reply / Read aloud), via LocalTextToolbar
         androidx.compose.foundation.ComposeFoundationFlags.isNewContextMenuEnabled = false
         super.onCreate()
+        CrashLog.attach(filesDir)
+        installCrashRecorder()
         Graph.init(this)
+    }
+
+    /**
+     * A crash that reaches the thread's default handler kills the process, and the process owns the
+     * proot server: the running agent task dies with it. We can't save the process here, but we can
+     * leave the stack trace behind for the bug report and still crash the way Android expects.
+     */
+    private fun installCrashRecorder() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, e ->
+            CrashLog.record("fatal ${thread.name}", e)
+            if (previous != null) previous.uncaughtException(thread, e)
+            else android.os.Process.killProcess(android.os.Process.myPid())
+        }
     }
 }
 
 /** Single place where dependencies are wired up: the app is small, no DI framework needed. */
 object Graph {
     lateinit var app: Application
-    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    /**
+     * SupervisorJob keeps one failed child from cancelling its siblings. The handler is the other
+     * half: without it an uncaught throw inside any of these launches reaches Android's default
+     * handler, kills the process and, with it, the proot server and whatever task was running.
+     */
+    val scope = CoroutineScope(
+        SupervisorJob() + Dispatchers.Main.immediate +
+            CoroutineExceptionHandler { _, e -> CrashLog.record("background", e) }
+    )
     lateinit var prefs: Prefs
     lateinit var paths: RuntimePaths
     lateinit var runtime: RuntimeController
@@ -70,9 +96,21 @@ object Graph {
         LiveNotify.start()
         // the server is up: connect the "phone" MCP to it (the config entry changes only when needed)
         scope.launch { runtime.state.collect { if (it is com.celoext.runtime.RuntimeState.Running) PhoneBridge.register() } }
-        Memory.sync()
-        Vault.restore()
-        Vault.reconcileAccount()
-        scope.launch(Dispatchers.IO) { while (true) { Vault.saveLight(); Vault.reconcileAccount(); delay(30_000) } }
+        // With no native runtime yet, /root still lives in the old proot rootfs: install() migrates
+        // it and restores the vault first. Writing a fresh AGENTS.md here would create a newer
+        // placeholder that the vault restore then refuses to overwrite, losing the user's rules.
+        if (paths.nativeReady) {
+            Vault.restore()
+            Memory.sync()
+            Vault.reconcileAccount()
+        }
+        scope.launch(Dispatchers.IO) {
+            while (true) {
+                // A reset in this session deletes the native home: do not overwrite the good vault
+                // copy with files read from an empty one.
+                if (paths.nativeReady) { Vault.saveLight(); Vault.reconcileAccount() }
+                delay(30_000)
+            }
+        }
     }
 }
