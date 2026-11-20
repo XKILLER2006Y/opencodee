@@ -17,7 +17,30 @@ object Downloader {
     /** Thrown for HTTP 5xx: GitHub's CDN returns 502/503/504 now and then, so these are retried. */
     private class Transient(msg: String) : RuntimeException(msg)
 
-    fun fetch(url: String, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) {
+    /** HTTP 404/410: this host dropped the file (Termux keeps only the latest package), try the next mirror. */
+    private class Gone(msg: String) : RuntimeException(msg)
+
+    fun fetch(url: String, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) =
+        fetch(listOf(url), dest, sha256, onProgress)
+
+    /**
+     * Tries [urls] in order and stops at the first one that serves the file. Mirrors carry the same
+     * bytes, so the sha256 stays the proof of what was downloaded.
+     */
+    fun fetch(urls: List<String>, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) {
+        require(urls.isNotEmpty()) { "No download URL" }
+        var last: Gone? = null
+        for ((i, url) in urls.withIndex()) {
+            try { fetchWithRetry(url, dest, sha256, onProgress); return }
+            catch (e: Gone) {
+                last = e
+                if (i == urls.lastIndex) throw IllegalStateException(e.message)
+            }
+        }
+        throw IllegalStateException(last?.message ?: "Download failed")
+    }
+
+    private fun fetchWithRetry(url: String, dest: File, sha256: String?, onProgress: (done: Long, total: Long) -> Unit) {
         var attempt = 0
         while (true) {
             try { fetchOnce(url, dest, sha256, onProgress); return }
@@ -45,6 +68,7 @@ object Downloader {
                 part.delete()
                 throw java.io.IOException("Download $url: HTTP 416, restarting from zero")
             }
+            if (r.code == 404 || r.code == 410) throw Gone("Download $url: HTTP ${r.code}")
             if (r.code >= 500) throw Transient("Download $url: HTTP ${r.code}")
             if (!r.isSuccessful) error("Download $url: HTTP ${r.code}")
 

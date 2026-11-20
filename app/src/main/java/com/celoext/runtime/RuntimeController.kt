@@ -39,13 +39,21 @@ class RuntimeController(
         const val OCT_VERSION = "2.2.7"
         const val OCT_SHA = "432c809a6e2dcb4ea08be79d96694b755c22129de10d07ff1abf2bebae4c8266"
         fun octUrl(v: String) = "https://github.com/$OCT_REPO/releases/download/v$v/opencode-$v-android-aarch64-bundle.tar.gz"
-        const val TERMUX = "https://packages.termux.dev/apt/termux-main/pool/main"
-        class Deb(val name: String, val url: String, val sha: String)
+        // Termux keeps only the latest build of each package, and the primary host drops the old
+        // files without warning (issue #10: bun 1.4.4-3 began returning 404). Every package stays
+        // pinned by sha256, and the first mirror that still has it serves the bytes.
+        val TERMUX_HOSTS = listOf(
+            "https://packages.termux.dev/apt/termux-main",
+            "https://packages-cf.termux.dev/apt/termux-main",
+        )
+        class Deb(val name: String, val path: String, val sha: String) {
+            val urls get() = TERMUX_HOSTS.map { "$it/$path" }
+        }
         val TERMUX_DEBS = listOf(
-            Deb("bun", "$TERMUX/b/bun/bun_1.4.4-3_aarch64.deb", "ceb20de1f3eff7cd1230d80d85e2d916611a89e90a93113d682d1d721591f4d8"),
-            Deb("libicu", "$TERMUX/libi/libicu/libicu_79.1_aarch64.deb", "83c980a010e957738e3567127801d66a1b9bd7e404a4fda98788048ee57d606c"),
-            Deb("ripgrep", "$TERMUX/r/ripgrep/ripgrep_15.2.0_aarch64.deb", "38e28bc297000517b24702568a483eca7dc3323eb6bdccc9033f031776bdcc6c"),
-            Deb("pcre2", "$TERMUX/p/pcre2/pcre2_10.49_aarch64.deb", "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"),
+            Deb("bun", "pool/main/b/bun/bun_1.4.5_aarch64.deb", "ebc12e294c3ee6dde21f8a78c1dd42f3304a599b68ebd074333838cff2d0e880"),
+            Deb("libicu", "pool/main/libi/libicu/libicu_79.1_aarch64.deb", "83c980a010e957738e3567127801d66a1b9bd7e404a4fda98788048ee57d606c"),
+            Deb("ripgrep", "pool/main/r/ripgrep/ripgrep_15.2.0_aarch64.deb", "38e28bc297000517b24702568a483eca7dc3323eb6bdccc9033f031776bdcc6c"),
+            Deb("pcre2", "pool/main/p/pcre2/pcre2_10.49_aarch64.deb", "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"),
         )
     }
 
@@ -203,7 +211,7 @@ class RuntimeController(
             if (have) { logLine("termux ${deb.name}: already installed"); continue }
             step("Downloading ${deb.name}", 0f)
             val f = File(paths.downloads, "${deb.name}-${deb.sha.take(8)}.deb")
-            Downloader.fetch(deb.url, f, deb.sha) { d, t -> step("Downloading ${deb.name}", frac(d, t), mb(d, t)) }
+            Downloader.fetch(deb.urls, f, deb.sha) { d, t -> step("Downloading ${deb.name}", frac(d, t), mb(d, t)) }
             step("Installing ${deb.name}", 0f)
             val r = DebExtractor.extract(f, paths.nativeUsr) { d, t -> step("Installing ${deb.name}", frac(d, t)) }
             // Written only after a complete unpack. A killed install leaves files but no marker, so
