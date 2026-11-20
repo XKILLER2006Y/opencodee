@@ -15,6 +15,9 @@ import com.celoext.api.EventHub
 import com.celoext.api.obj
 import com.celoext.api.parsePermission
 import com.celoext.api.str
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -29,6 +32,16 @@ object LiveNotify {
 
     private class Run(var step: String = "Thinking…", var steps: Int = 0, val files: MutableSet<String> = linkedSetOf(), val started: Long = System.currentTimeMillis())
     private val runs = HashMap<String, Run>()
+
+    private val _active = MutableStateFlow<List<LiveTask>>(emptyList())
+    /** What is running now, for the in-app task pill. Empty when no session works. */
+    val active: StateFlow<List<LiveTask>> = _active.asStateFlow()
+
+    private fun publish() {
+        _active.value = runs.map { (sid, r) ->
+            LiveTask(sid, r.step, r.steps, r.files.size, r.started)
+        }.sortedBy { it.started }
+    }
 
     private val ctx: Context get() = Graph.app
     private val nm get() = ctx.getSystemService(NotificationManager::class.java)
@@ -59,7 +72,9 @@ object LiveNotify {
             "message.part.updated" -> {
                 val part = p.obj("part") ?: return
                 val sid = part.str("sessionID") ?: return
-                val r = runs[sid] ?: return
+                // A session can already be busy when the app opens and miss its first status event.
+                // The next tool part then creates the run, so the in-app pill gets a live step too.
+                val r = runs[sid] ?: if (Graph.chats.statuses.value[sid] != null) Run().also { runs[sid] = it } else return
                 when (part.str("type")) {
                     "tool" -> {
                         val tool = part.str("tool") ?: return
@@ -86,9 +101,10 @@ object LiveNotify {
             "question.asked" -> if (!Graph.chats.foreground && Graph.prefs.liveNotify) question(p)
             "question.replied", "question.rejected" -> p.str("requestID")?.let { nm.cancel(askId(it)) }
         }
+        publish()
     }
 
-    private fun done(sid: String) { runs.remove(sid); nm.cancel(liveId(sid)) }
+    private fun done(sid: String) { runs.remove(sid); nm.cancel(liveId(sid)); publish() }
 
     private fun base(name: String) = name.substringAfterLast('/')
 
