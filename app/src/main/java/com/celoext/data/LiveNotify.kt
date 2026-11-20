@@ -50,6 +50,17 @@ object LiveNotify {
         if (nm.getNotificationChannel(CH_LIVE) == null) nm.createNotificationChannel(NotificationChannel(CH_LIVE, "Agent at work", NotificationManager.IMPORTANCE_DEFAULT).apply { setSound(null, null); enableVibration(false) })
         if (nm.getNotificationChannel(CH_ASK) == null) nm.createNotificationChannel(NotificationChannel(CH_ASK, "Agent needs your OK", NotificationManager.IMPORTANCE_HIGH).apply { lockscreenVisibility = Notification.VISIBILITY_PUBLIC })
         Graph.scope.launch { Graph.events.events.collect { runCatching { handle(it) } } }
+        // A dropped stream never sends the idle event, so its run would keep its old start time and
+        // step counts into the next prompt. Clear on the false edge; status events rebuild on reconnect.
+        Graph.scope.launch {
+            Graph.events.connected.collect { up ->
+                if (!up && runs.isNotEmpty()) {
+                    runs.keys.forEach { nm.cancel(liveId(it)) }
+                    runs.clear()
+                    publish()
+                }
+            }
+        }
     }
 
     /** The app is on screen again: progress notifications are no longer needed. */
